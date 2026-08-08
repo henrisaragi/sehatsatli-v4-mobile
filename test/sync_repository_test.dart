@@ -143,4 +143,154 @@ void main() {
     expect(first.retryCount, 1); // the one attempt that failed
     expect(second.retryCount, 0); // never even attempted — loop broke first
   });
+
+  test(
+      'runSyncQueue() leaves a _resolveIdFromClientId item pending and never '
+      'posts it while its report\'s server_id is still unknown', () async {
+    const clientId = 'test-client-unresolved-dependent';
+    // No local_reports row at all yet — the Tab 1 create hasn't even been
+    // queued, let alone synced, so server_id can't possibly be known.
+    final queueId = await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: 'api/general-reports/saveVerify',
+      payloadJson: jsonEncode({
+        'verified_date': '2026-01-01',
+        'client_id': clientId,
+        '_sectionKey': 'verification',
+        '_resolveIdFromClientId': true,
+      }),
+    );
+
+    var postCount = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.contains('ping')) {
+        return http.Response(jsonEncode({'success': true}), 200);
+      }
+      postCount++;
+      return http.Response(jsonEncode({'success': true, 'data': {}}), 200);
+    });
+
+    FFAppState().accessToken = 'tok';
+    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+
+    expect(postCount, 0); // never attempted — server id unresolved
+    final stillQueued = await SQLiteManager.instance.getPendingSyncQueue();
+    final row = stillQueued.firstWhere((r) => r.id == queueId);
+    expect(row.status, 'pending');
+    expect(row.retryCount, 0); // untouched, not counted as a failed attempt
+  });
+
+  test(
+      'runSyncQueue() resolves a dependent section item in the same drain '
+      'pass once its report\'s create item (queued earlier) succeeds',
+      () async {
+    const clientId = 'test-client-same-pass-resolve';
+    await SQLiteManager.instance.upsertLocalReport(
+      clientId: clientId,
+      payloadJson: jsonEncode({'client_id': clientId, 'report_date': '2026-01-01'}),
+      syncStatus: 'pending',
+    );
+    // Enqueued first (create), so FIFO drains it before the dependent item.
+    await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: 'api/general-reports/save',
+      payloadJson: jsonEncode({'client_id': clientId, 'report_date': '2026-01-01'}),
+    );
+    await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: 'api/general-reports/saveVerify',
+      payloadJson: jsonEncode({
+        'verified_date': '2026-01-01',
+        'client_id': clientId,
+        '_sectionKey': 'verification',
+        '_resolveIdFromClientId': true,
+      }),
+    );
+
+    dynamic verifyRequestBody;
+    final client = MockClient((request) async {
+      if (request.url.path.contains('ping')) {
+        return http.Response(jsonEncode({'success': true}), 200);
+      }
+      if (request.url.path.contains('saveVerify')) {
+        verifyRequestBody = jsonDecode(request.body);
+        return http.Response(jsonEncode({'success': true, 'data': {}}), 200);
+      }
+      // The create call — returns the new server id.
+      return http.Response(
+        jsonEncode({
+          'success': true,
+          'data': {'id': 77, 'report_code': 'REP-77'},
+        }),
+        200,
+      );
+    });
+
+    FFAppState().accessToken = 'tok';
+    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+
+    final stillPending = await SQLiteManager.instance.getPendingSyncQueue();
+    expect(stillPending.where((r) => r.clientId == clientId), isEmpty);
+    expect(verifyRequestBody, isNotNull);
+    expect(verifyRequestBody['id'], 77); // resolved from the create's server id
+    expect(verifyRequestBody.containsKey('_resolveIdFromClientId'), isFalse);
+
+    final localRows = await SQLiteManager.instance.getAllLocalReports();
+    final row = localRows.firstWhere((r) => r.clientId == clientId);
+    expect(row.serverId, 77);
+    expect(row.reportCode, 'REP-77');
+  });
+
+  test(
+      'runSyncQueue() merges a section-endpoint success into payload_json '
+      'without erasing other sections or nulling an already-known server_id',
+      () async {
+    const clientId = 'test-client-section-merge';
+    await SQLiteManager.instance.upsertLocalReport(
+      clientId: clientId,
+      payloadJson: jsonEncode({
+        'client_id': clientId,
+        'report_date': '2026-01-01',
+        'lab': {'final_diagnosis': 'existing lab data'},
+      }),
+      syncStatus: 'synced',
+      serverId: 10,
+      reportCode: 'REP-10',
+    );
+    await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: 'api/general-reports/saveVerify',
+      payloadJson: jsonEncode({
+        'verified_date': '2026-01-01',
+        'client_id': clientId,
+        'id': 10,
+        '_sectionKey': 'verification',
+      }),
+    );
+
+    // Response omits both `id` and `report_code` — must not null out the
+    // already-known ones.
+    final client = MockClient((request) async {
+      if (request.url.path.contains('ping')) {
+        return http.Response(jsonEncode({'success': true}), 200);
+      }
+      return http.Response(
+        jsonEncode({'success': true, 'data': {'message': 'ok'}}),
+        200,
+      );
+    });
+
+    FFAppState().accessToken = 'tok';
+    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+
+    final localRows = await SQLiteManager.instance.getAllLocalReports();
+    final row = localRows.firstWhere((r) => r.clientId == clientId);
+    expect(row.serverId, 10); // preserved, not nulled out
+    expect(row.reportCode, 'REP-10'); // preserved, not nulled out
+
+    final payload = jsonDecode(row.payloadJson!) as Map<String, dynamic>;
+    expect(payload['lab']['final_diagnosis'], 'existing lab data'); // survived
+    expect(payload['verification']['verified_date'], '2026-01-01'); // merged in
+    expect(payload['report_date'], '2026-01-01'); // top-level fields survived too
+  });
 }
