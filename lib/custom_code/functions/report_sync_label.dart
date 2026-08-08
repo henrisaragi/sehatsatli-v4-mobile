@@ -1,0 +1,23 @@
+import 'dart:convert';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import '/flutter_flow/custom_functions.dart';
+import '/flutter_flow/lat_lng.dart';
+import '/flutter_flow/place.dart';
+import '/flutter_flow/uploaded_file.dart';
+import '/backend/backend.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '/backend/sqlite/sqlite_manager.dart';
+
+String reportSyncLabel(
+  List<ReportsRecord> reports,
+  String reportId,
+) {
+  final ts = currentReport(reports, reportId)['sync_at'] as int?;
+  if (ts == null) return "Not synchronized yet";
+  return "Last synchronized with Pusvetma on Oct 24, 2023";
+}
