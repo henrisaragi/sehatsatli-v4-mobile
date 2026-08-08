@@ -6,9 +6,9 @@ import '../../core/constants/api_endpoints.dart';
 /// caveat on the login contract itself), so each field tries several
 /// plausible candidates before falling back to a placeholder.
 ///
-/// Shared by [UserProfileSettingsWidget] (profile screen) and
-/// [NewGeneralReportWidget] (Step 1 — reporter identity is pre-filled from
-/// the logged-in user rather than typed in).
+/// Shared by [UserProfileSettingsWidget] (profile screen) and the Full
+/// Report page's Investigasi tab (reporter identity and UPT are pre-filled
+/// from the logged-in user rather than typed in).
 class UserProfileFields {
   UserProfileFields(this.raw);
 

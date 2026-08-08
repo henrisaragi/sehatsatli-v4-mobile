@@ -339,10 +339,10 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                   onTap: () {
                                     if (item.serverId == null) {
                                       // Not synced yet (draft/pending/failed)
-                                      // — editable via the same wizard
-                                      // instead of a dead-end message.
+                                      // — editable via the same Full Report
+                                      // page instead of a dead-end message.
                                       context.pushNamed(
-                                        NewGeneralReportWidget.routeName,
+                                        FullReportWidget.routeName,
                                         queryParameters: {
                                           'clientId': serializeParam(
                                               item.clientId,
@@ -352,7 +352,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                       return;
                                     }
                                     context.pushNamed(
-                                      ReportDetailViewWidget.routeName,
+                                      FullReportWidget.routeName,
                                       queryParameters: {
                                         'reportId': serializeParam(
                                             item.serverId.toString(),

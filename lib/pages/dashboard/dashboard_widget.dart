@@ -344,7 +344,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
           model: _model.actionCardModel1,
           updateCallback: () => safeSetState(() {}),
           child: ActionCardWidget(
-            onTap: () => context.pushNamed(NewGeneralReportWidget.routeName),
+            onTap: () => context.pushNamed(QuickReportWidget.routeName),
             tone: FlutterFlowTheme.of(context).primary,
             icon: Icon(Icons.assignment_rounded,
                 color: FlutterFlowTheme.of(context).primaryText, size: 24.0),
@@ -413,7 +413,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                 onTap: () {
                   if (item.serverId == null) {
                     context.pushNamed(
-                      NewGeneralReportWidget.routeName,
+                      FullReportWidget.routeName,
                       queryParameters: {
                         'clientId': serializeParam(
                             item.clientId, ParamType.String),
@@ -422,7 +422,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                     return;
                   }
                   context.pushNamed(
-                    ReportDetailViewWidget.routeName,
+                    FullReportWidget.routeName,
                     queryParameters: {
                       'reportId': serializeParam(
                           item.serverId.toString(), ParamType.String),

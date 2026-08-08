@@ -94,14 +94,9 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => DashboardWidget(),
         ),
         FFRoute(
-          name: NewGeneralReportWidget.routeName,
-          path: NewGeneralReportWidget.routePath,
-          builder: (context, params) => NewGeneralReportWidget(
-            clientId: params.getParam(
-              'clientId',
-              ParamType.String,
-            ),
-          ),
+          name: QuickReportWidget.routeName,
+          path: QuickReportWidget.routePath,
+          builder: (context, params) => QuickReportWidget(),
         ),
         FFRoute(
           name: NotificationInboxWidget.routeName,
@@ -114,40 +109,17 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => EditProfileWidget(),
         ),
         FFRoute(
-          name: ReportDetailViewWidget.routeName,
-          path: ReportDetailViewWidget.routePath,
-          builder: (context, params) => ReportDetailViewWidget(
-            reportId: params.getParam(
-              'reportId',
-              ParamType.String,
-            ),
+          name: FullReportWidget.routeName,
+          path: FullReportWidget.routePath,
+          builder: (context, params) => FullReportWidget(
+            clientId: params.getParam('clientId', ParamType.String),
+            reportId: params.getParam('reportId', ParamType.String),
           ),
         ),
         FFRoute(
           name: ReportHistoryWidget.routeName,
           path: ReportHistoryWidget.routePath,
           builder: (context, params) => ReportHistoryWidget(),
-        ),
-        FFRoute(
-          name: ReportVerificationWidget.routeName,
-          path: ReportVerificationWidget.routePath,
-          builder: (context, params) => ReportVerificationWidget(
-            reportId: params.getParam('reportId', ParamType.String),
-          ),
-        ),
-        FFRoute(
-          name: ReportLabWidget.routeName,
-          path: ReportLabWidget.routePath,
-          builder: (context, params) => ReportLabWidget(
-            reportId: params.getParam('reportId', ParamType.String),
-          ),
-        ),
-        FFRoute(
-          name: ReportInvestigationWidget.routeName,
-          path: ReportInvestigationWidget.routePath,
-          builder: (context, params) => ReportInvestigationWidget(
-            reportId: params.getParam('reportId', ParamType.String),
-          ),
         ),
         FFRoute(
           name: SplashAuthWidget.routeName,

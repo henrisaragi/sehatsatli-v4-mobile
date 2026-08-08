@@ -319,42 +319,4 @@ class ReportRepository {
     return null;
   }
 
-  /// Rebuilds a full `saveGeneralReportMobile`-shaped payload from a
-  /// [fetchOne] response, replacing exactly one of the `verification`/`lab`/
-  /// `investigation` sections with freshly-edited data and carrying the rest
-  /// over unchanged — used by the Step-5 forms, which only edit one section
-  /// at a time but must resubmit the whole report (the server has no
-  /// per-section save endpoint). The exact key `getOne` uses for the
-  /// location relation isn't confirmed (API_ENDPOINTS.md's prose says
-  /// "location" singular but the save payload key is "locations" plural), so
-  /// both are tried defensively.
-  Map<String, dynamic> mergeSection(
-    Map<String, dynamic> existingReport,
-    String sectionKey,
-    Map<String, dynamic> sectionData,
-  ) {
-    Map<String, dynamic>? asMap(dynamic value) =>
-        value is Map ? Map<String, dynamic>.from(value) : null;
-
-    final sections = {
-      'verification': asMap(existingReport['verification']),
-      'lab': asMap(existingReport['lab']),
-      'investigation': asMap(existingReport['investigation']),
-    };
-    sections[sectionKey] = sectionData;
-
-    return {
-      'report_date': existingReport['report_date'],
-      'description': existingReport['description'],
-      'reporter': asMap(existingReport['reporter']) ?? <String, dynamic>{},
-      'locations': asMap(existingReport['locations']) ??
-          asMap(existingReport['location']) ??
-          <String, dynamic>{},
-      'species': asMap(existingReport['species']) ?? <String, dynamic>{},
-      'diagnoses': asMap(existingReport['diagnoses']) ?? <String, dynamic>{},
-      'verification': sections['verification'],
-      'lab': sections['lab'],
-      'investigation': sections['investigation'],
-    };
-  }
 }

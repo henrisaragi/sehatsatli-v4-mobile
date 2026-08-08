@@ -97,9 +97,9 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
   void _openReport(GetAllLocalReportsRow row) {
     if (row.serverId == null) {
       // Not synced yet (draft/pending/failed) — editable via the same
-      // wizard instead of a dead-end message.
+      // Full Report page instead of a dead-end message.
       context.pushNamed(
-        NewGeneralReportWidget.routeName,
+        FullReportWidget.routeName,
         queryParameters: {
           'clientId': serializeParam(row.clientId, ParamType.String),
         }.withoutNulls,
@@ -107,7 +107,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
       return;
     }
     context.pushNamed(
-      ReportDetailViewWidget.routeName,
+      FullReportWidget.routeName,
       queryParameters: {
         'reportId': serializeParam(row.serverId.toString(), ParamType.String),
       }.withoutNulls,

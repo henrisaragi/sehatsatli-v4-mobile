@@ -102,7 +102,7 @@ class MainBottomNavWidget extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(9999.0),
                 onTap: () =>
-                    context.pushNamed(NewGeneralReportWidget.routeName),
+                    context.pushNamed(QuickReportWidget.routeName),
                 child: Container(
                   width: 56.0,
                   height: 56.0,
