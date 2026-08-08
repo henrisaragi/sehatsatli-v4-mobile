@@ -26,13 +26,34 @@ abstract class ApiEndpoints {
       'api/general-reports/deleteGeneralReportMobile';
   static const String getGeneralReportMobile =
       'api/general-reports/getGeneralReportMobile';
+  // Confirmed live 2026-08-08 against production: returns a much broader/
+  // more complete report list than `getGeneralReportMobile` did (surfaced
+  // years of historical records `getGeneralReportMobile` never returned).
+  // `fetchReports()` uses this now. NOTE: this did NOT fix the original
+  // "my new report doesn't show up" symptom — that turned out to be a
+  // separate, more serious problem upstream at create time, not a list-
+  // endpoint choice. See the doc comment on `generalReportsSave` below.
+  static const String generalReportsGetAll = 'api/general-reports/getAll';
   static const String getOne = 'api/general-reports/getOne';
   // Per docs/general-report-field.md — a distinct, flat-payload "create new
   // report" endpoint (not the nested reporter/locations/species/diagnoses
   // shape `saveGeneralReportMobile` uses). Used by both the Quick Report
   // create form and Full Report Tab 1 (Investigasi) update — see
-  // revisi.md. Tabs 2-4 use the three per-section endpoints below instead of
-  // resubmitting the whole report.
+  // revisi.md.
+  //
+  // ⚠️ CONFIRMED LIVE BUG (2026-08-08, production): a successful create
+  // (`success: true`) responds with `"data": null` — no `id`, no
+  // `report_code`. The app correctly leaves `server_id` unset in this case
+  // (see `applyServerResultToLocalReport`), so the report stays stuck
+  // showing "Menunggu sinkronisasi" forever even though the queue marks it
+  // done. Repeated live tests (multiple distinct `species_name` values,
+  // multiple submissions) found the created report **never appears** in
+  // `generalReportsGetAll` either, by id or by search — strong signal the
+  // backend isn't actually persisting a queryable record, not just omitting
+  // it from the response. This needs a backend-side fix; nothing on the
+  // Flutter side can compensate for a response with no id and a report that
+  // never surfaces in any list/search. Tabs 2-4 use the three per-section
+  // endpoints below instead of resubmitting the whole report.
   static const String generalReportsSave = 'api/general-reports/save';
   // Full Report Tab 2/3/4 — per-section save endpoints (revisi.md §2),
   // verified live against production. Each takes a flat payload (not

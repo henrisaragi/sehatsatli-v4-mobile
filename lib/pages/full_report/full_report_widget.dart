@@ -756,30 +756,32 @@ class _FullReportWidgetState extends State<FullReportWidget>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      FlutterFlowIconButton(
-                        borderRadius: 8.0,
-                        buttonSize: 40.0,
-                        icon: Icon(Icons.arrow_back_rounded,
-                            color: FlutterFlowTheme.of(context).primaryText),
-                        onPressed: () => context.pop(),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _reportCode != null && _reportCode!.isNotEmpty
-                              ? 'KODE LAPORAN: $_reportCode'
-                              : 'Menunggu sinkronisasi',
-                          overflow: TextOverflow.ellipsis,
-                          style: FlutterFlowTheme.of(context).titleLarge.override(
-                                font: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.bold),
-                                color: FlutterFlowTheme.of(context).primaryText,
-                                fontWeight: FontWeight.bold,
-                              ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        FlutterFlowIconButton(
+                          borderRadius: 8.0,
+                          buttonSize: 40.0,
+                          icon: Icon(Icons.arrow_back_rounded,
+                              color: FlutterFlowTheme.of(context).primaryText),
+                          onPressed: () => context.pop(),
                         ),
-                      ),
-                    ],
+                        Expanded(
+                          child: Text(
+                            _reportCode != null && _reportCode!.isNotEmpty
+                                ? 'KODE LAPORAN: $_reportCode'
+                                : 'Menunggu sinkronisasi',
+                            overflow: TextOverflow.ellipsis,
+                            style: FlutterFlowTheme.of(context).titleLarge.override(
+                                  font: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold),
+                                  color: FlutterFlowTheme.of(context).primaryText,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   if (_clientId != null)
                     FlutterFlowIconButton(

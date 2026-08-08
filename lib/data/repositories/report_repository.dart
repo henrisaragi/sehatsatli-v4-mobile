@@ -262,7 +262,7 @@ class ReportRepository {
     required String token,
   }) async {
     final response = await _apiClient.post(
-      ApiEndpoints.getGeneralReportMobile,
+      ApiEndpoints.generalReportsGetAll,
       body: {'id': training ? 1 : 0, 'page': page},
       token: token,
     );
