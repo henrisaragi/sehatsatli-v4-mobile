@@ -29,11 +29,17 @@ abstract class ApiEndpoints {
   static const String getOne = 'api/general-reports/getOne';
   // Per docs/general-report-field.md — a distinct, flat-payload "create new
   // report" endpoint (not the nested reporter/locations/species/diagnoses
-  // shape `saveGeneralReportMobile` uses). Only the New General Report
-  // wizard uses this; the Step-5 verification/lab/investigation edit flows
-  // still resubmit through `saveGeneralReportMobile` via
-  // `ReportRepository.mergeSection`.
+  // shape `saveGeneralReportMobile` uses). Used by both the Quick Report
+  // create form and Full Report Tab 1 (Investigasi) update — see
+  // revisi.md. Tabs 2-4 use the three per-section endpoints below instead of
+  // resubmitting the whole report.
   static const String generalReportsSave = 'api/general-reports/save';
+  // Full Report Tab 2/3/4 — per-section save endpoints (revisi.md §2),
+  // verified live against production. Each takes a flat payload (not
+  // nested) plus a hidden `id` = the report's server id.
+  static const String saveVerify = 'api/general-reports/saveVerify';
+  static const String saveLab = 'api/general-reports/saveLab';
+  static const String saveInvestigation = 'api/general-reports/saveInvestigation';
 
   // Public vet lookup for the verification stage's involved_doctors field.
   static const String dokterGetAll = 'api/dokter/getAll';

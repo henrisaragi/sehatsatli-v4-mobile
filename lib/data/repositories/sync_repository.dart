@@ -7,6 +7,7 @@ import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_response_helper.dart';
+import 'local_report_merge.dart';
 
 /// Implements the sync algorithm documented in CLAUDE.md/design_system_mobile.md
 /// §7.4 — the outbox-draining half of offline-first. Drains `sync_queue` FIFO,
@@ -30,10 +31,33 @@ class SyncRepository {
       final pending = await SQLiteManager.instance.getPendingSyncQueue();
       for (final item in pending) {
         try {
-          final body = jsonDecode(item.payloadJson);
+          final decoded = jsonDecode(item.payloadJson);
+          final outgoingPayload =
+              decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+
+          Map<String, dynamic> body;
+          if (outgoingPayload['_resolveIdFromClientId'] == true) {
+            // Tab 2-4 section save queued before its report's own create had
+            // synced yet. Re-check now — a create enqueued earlier in this
+            // same FIFO pass may have already resolved it.
+            final local = await SQLiteManager.instance.getLocalReport(item.clientId);
+            if (local?.serverId == null) {
+              // Still unresolved — leave this item pending untouched (no
+              // status change, no retry bump) and move on to the next
+              // unrelated queue item; it'll be retried on a later pass.
+              continue;
+            }
+            body = {...outgoingPayload}
+              ..remove('_resolveIdFromClientId')
+              ..remove('_sectionKey')
+              ..['id'] = local!.serverId;
+          } else {
+            body = {...outgoingPayload}..remove('_sectionKey');
+          }
+
           final response = await _apiClient.post(
             item.endpoint,
-            body: body is Map<String, dynamic> ? body : <String, dynamic>{},
+            body: body,
             token: token,
           );
 
@@ -42,19 +66,19 @@ class SyncRepository {
                 ? response['data'] as Map<String, dynamic>
                 : response;
             await SQLiteManager.instance.markSyncItemDone(item.id);
-            await SQLiteManager.instance.upsertLocalReport(
+            await applyServerResultToLocalReport(
               clientId: item.clientId,
-              payloadJson: item.payloadJson,
+              outgoingPayload: outgoingPayload,
+              responseData: data,
               syncStatus: 'synced',
-              serverId: data['id'] as int?,
-              reportCode: data['report_code'] as String?,
             );
           } else {
             final message = extractApiMessage(response) ?? 'Server rejected the item';
             await SQLiteManager.instance.markSyncItemFailed(item.id, message);
-            await SQLiteManager.instance.upsertLocalReport(
+            await applyServerResultToLocalReport(
               clientId: item.clientId,
-              payloadJson: item.payloadJson,
+              outgoingPayload: outgoingPayload,
+              responseData: const {},
               syncStatus: 'failed',
             );
             // Not a connectivity problem — keep draining the rest of the queue.

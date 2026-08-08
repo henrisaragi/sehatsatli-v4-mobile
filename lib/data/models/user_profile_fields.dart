@@ -55,6 +55,14 @@ class UserProfileFields {
     }
   }
 
+  /// Confirmed key names (unlike the defensive multi-key fields above) — see
+  /// `edit_profile_widget.dart`'s existing `_raw['upt_type']`/`_raw['upt_id']`
+  /// usage and revisi.md bug note #2. Used to auto-fill the read-only
+  /// Tipe UPT/Nama UPT fields in the report form.
+  String? get uptType => _pick(['upt_type']);
+
+  dynamic get uptId => raw?['upt_id'];
+
   String? get photoUrl {
     final value = _pick(['photo_url', 'avatar_url', 'photo', 'avatar', 'foto']);
     if (value == null) return null;

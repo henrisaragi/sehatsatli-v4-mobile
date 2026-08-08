@@ -42,7 +42,20 @@ class MasterRepository {
     }
   }
 
-  Future<dynamic> getCachedMasters() => _readCached('masters');
+  /// The live `masters` response wraps every option group inside
+  /// `data.options.*` (e.g. `{options: {upt_type: [...], case_types: [...]},
+  /// trained: ...}`), not flat at the top level — confirmed against
+  /// production, see revisi.md bug note #1. [refreshAll] caches the raw
+  /// response as-is; unwrap it here, once, so every consumer (existing and
+  /// future) gets the option lists directly without needing to know about
+  /// the wrapping.
+  Future<dynamic> getCachedMasters() async {
+    final cached = await _readCached('masters');
+    if (cached is Map && cached['options'] is Map) {
+      return cached['options'];
+    }
+    return cached;
+  }
   Future<dynamic> getCachedLocationUser() => _readCached('location_user');
   Future<dynamic> getCachedDiseases() => _readCached('diseases');
   Future<dynamic> getCachedSpecies() => _readCached('species');
