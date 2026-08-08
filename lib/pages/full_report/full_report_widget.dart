@@ -149,6 +149,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
   List<dynamic> _t1Insitu = [];
   String? _t1InsituOther;
   List<dynamic> _t1Exsitu = [];
+  String? _t1ExsituOther;
   double? _t1Latitude;
   double? _t1Longitude;
   bool _t1FetchingGps = false;
@@ -251,7 +252,23 @@ class _FullReportWidgetState extends State<FullReportWidget>
       if (remote != null) {
         _serverId = (remote['id'] as int?) ?? _serverId;
         _reportCode = (remote['report_code'] as String?) ?? _reportCode;
-        _clientId ??= remote['client_id']?.toString();
+        final remoteClientId = remote['client_id']?.toString();
+        // Most existing reports predate this app's offline-first client_id
+        // scheme and come back with `client_id: null` from the server
+        // (confirmed live 2026-08-08 — every pre-existing test report had
+        // this). Without a fallback here, `_clientId` would stay null
+        // forever for those reports, which permanently blocks Tabs 2-4
+        // (gated on a local_reports row keyed by client_id) and the delete
+        // button (which requires clientId) for the vast majority of real
+        // reports — not just a rare edge case. Since this report already
+        // has a real `_serverId`, a fresh LOCAL-only client_id is safe to
+        // mint here: it's only ever used for this device's own SQLite
+        // bookkeeping/offline-queue identity, never sent to a create
+        // endpoint (Tabs 2-4 submit against `_serverId`, not client_id).
+        _clientId ??=
+            (remoteClientId != null && remoteClientId.isNotEmpty)
+                ? remoteClientId
+                : ReportRepository().newClientId();
 
         // Materialize a local cache row for a report opened for the first
         // time on this device via reportId only, so Tabs 2-4 (which require
@@ -421,6 +438,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
     _t1Insitu = (pick('insitu_conservation', from: location) as List?) ?? [];
     _t1InsituOther = pick('insitu_other', from: location)?.toString();
     _t1Exsitu = (pick('exsitu_conservation', from: location) as List?) ?? [];
+    _t1ExsituOther = pick('exsitu_other', from: location)?.toString();
     final lat = pick('latitude', from: location) ?? pick('latitude', from: upt);
     final lng = pick('longitude', from: location) ?? pick('longitude', from: upt);
     _t1Latitude = lat is double ? lat : double.tryParse('$lat');
@@ -564,15 +582,23 @@ class _FullReportWidgetState extends State<FullReportWidget>
     final userId = user['id'];
     final reportDate =
         (_t1ReportDate ?? DateTime.now()).toIso8601String().split('T').first;
-    final isLkKhusus = _t1ConservationType == 'LK Khusus';
-    final isLkUmum = _t1ConservationType == 'LK Umum';
-    final isLainnya = _t1ConservationType == 'Lainnya';
+    // Must match the same dual-format check the UI uses to decide which
+    // group to show (line ~1117/1132) — the real master `conservation_type`
+    // option ids aren't confirmed numeric vs string-label yet (unverified
+    // assumption), so both are accepted here too. Using only the string
+    // label previously meant a numeric-id backend would silently drop
+    // whatever the user picked in the In-situ/Ex-situ tag pickers on save.
+    final isLkKhusus =
+        _t1ConservationType == 'LK Khusus' || _t1ConservationType == '1';
+    final isLkUmum =
+        _t1ConservationType == 'LK Umum' || _t1ConservationType == '2';
 
     final payload = <String, dynamic>{
       'id': _serverId ?? 0,
       'creator': userId,
       'updater': userId,
-      'training': user['trained'] == true || user['trained'] == 1,
+      'training':
+          user['trained'] == true || user['trained'] == 1 || user['trained'] == '1',
       'status': 1,
       'user_id': userId,
       'report_code': _reportCode ?? '',
@@ -596,8 +622,9 @@ class _FullReportWidgetState extends State<FullReportWidget>
       'location_name': _t1LocationName ?? '',
       'conservation_type': _t1ConservationType ?? '',
       'insitu_conservation': isLkKhusus ? _t1Insitu : <dynamic>[],
-      'insitu_other': isLainnya ? (_t1InsituOther ?? '') : '',
+      'insitu_other': isLkKhusus ? (_t1InsituOther ?? '') : '',
       'exsitu_conservation': isLkUmum ? _t1Exsitu : <dynamic>[],
+      'exsitu_other': isLkUmum ? (_t1ExsituOther ?? '') : '',
       'province_id': _t1ProvinceId,
       'district_id': _t1DistrictId,
       'subdistrict_id': _t1SubdistrictId,
@@ -1114,7 +1141,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
             options: _conservationTypes,
             onChanged: (v) => setState(() => _t1ConservationType = v?.toString()),
           ),
-          if (_t1ConservationType == 'LK Khusus' || _t1ConservationType == '1')
+          if (_t1ConservationType == 'LK Khusus' || _t1ConservationType == '1') ...[
             TagMultiSelectWidget(
               label: 'Konservasi In-situ',
               options: _insituOptions,
@@ -1123,13 +1150,13 @@ class _FullReportWidgetState extends State<FullReportWidget>
               optionId: optionId,
               onChanged: (v) => setState(() => _t1Insitu = v),
             ),
-          if (_t1ConservationType == 'Lainnya')
             _textField(
               label: 'In-situ Lainnya',
               value: _t1InsituOther,
               onChanged: (v) => _t1InsituOther = v,
             ),
-          if (_t1ConservationType == 'LK Umum' || _t1ConservationType == '2')
+          ],
+          if (_t1ConservationType == 'LK Umum' || _t1ConservationType == '2') ...[
             TagMultiSelectWidget(
               label: 'Konservasi Ex-situ',
               options: _exsituOptions,
@@ -1138,6 +1165,12 @@ class _FullReportWidgetState extends State<FullReportWidget>
               optionId: optionId,
               onChanged: (v) => setState(() => _t1Exsitu = v),
             ),
+            _textField(
+              label: 'Ex-situ Lainnya',
+              value: _t1ExsituOther,
+              onChanged: (v) => _t1ExsituOther = v,
+            ),
+          ],
           _dropdown(
             label: 'Provinsi',
             value: _t1ProvinceId,

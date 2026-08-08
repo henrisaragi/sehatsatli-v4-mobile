@@ -34,6 +34,12 @@ class RepeaterListWidget<T> extends StatelessWidget {
       children: [
         for (var i = 0; i < items.length; i++)
           Padding(
+            // Identity key (not index) — without this, removing a row in
+            // the middle makes Flutter reuse each remaining row's widget
+            // *state* (TextEditingControllers, focus, scroll position) by
+            // position instead of by which logical row it belongs to,
+            // which can show/edit the wrong row's data after a removal.
+            key: ObjectKey(items[i]),
             padding: EdgeInsets.only(bottom: 12.0),
             child: Container(
               padding: EdgeInsets.all(12.0),
