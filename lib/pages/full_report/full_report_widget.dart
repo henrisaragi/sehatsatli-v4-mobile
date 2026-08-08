@@ -891,6 +891,21 @@ class _FullReportWidgetState extends State<FullReportWidget>
                 _t1SpeciesLatinName = (selected['latin_name'] ?? '').toString();
                 final category = selected['category'];
                 if (category != null) _t1Category = category.toString();
+                // Species master has no dedicated "family" field, but its
+                // broader `type` (e.g. "MAMALIA (MENYUSUI)") is the same
+                // classification the Famili dropdown's `animal_types`
+                // master group uses as option labels — match by label to
+                // find the matching option id so the dropdown auto-selects.
+                final type = selected['type']?.toString();
+                if (type != null && type.isNotEmpty) {
+                  final match = _animalTypes.firstWhere(
+                    (o) => optionLabel(o) == type,
+                    orElse: () => const {},
+                  );
+                  if (match.isNotEmpty) {
+                    _t1SpeciesFamily = optionId(match)?.toString();
+                  }
+                }
               }),
             )
           else ...[

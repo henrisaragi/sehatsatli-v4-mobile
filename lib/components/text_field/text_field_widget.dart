@@ -77,6 +77,23 @@ class _TextFieldWidgetState extends State<TextFieldWidget> {
   }
 
   @override
+  void didUpdateWidget(covariant TextFieldWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // `_model.inputTextController` is only seeded from `widget.value` once,
+    // in initState (via `??=`) — a parent that programmatically changes
+    // `value` after the first build (e.g. auto-filling a field from a
+    // picker's onSelected) would otherwise never be reflected here. Only
+    // force the controller's text when the incoming value actually changed
+    // AND differs from what's currently displayed, so this doesn't fight
+    // the user's own typing (which already flows through `widget.onChanged`
+    // and would otherwise make `widget.value` lag one keystroke behind).
+    if (widget.value != oldWidget.value &&
+        widget.value != _model.inputTextController?.text) {
+      _model.inputTextController?.text = widget.value;
+    }
+  }
+
+  @override
   void dispose() {
     _model.maybeDispose();
 
