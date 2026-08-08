@@ -31,6 +31,12 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // The eye icon on the password field was purely decorative — TextFieldWidget
+  // renders `trailingIcon` as a static child with no tap handling at all, so
+  // nothing happened when it was pressed. Toggled via this + the field's new
+  // `onTrailingIconTap` callback.
+  bool _passwordVisible = false;
+
   @override
   void initState() {
     super.initState();
@@ -398,16 +404,23 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                               ),
                                               leadingIconPresent: true,
                                               trailingIcon: Icon(
-                                                Icons.visibility_off_rounded,
+                                                _passwordVisible
+                                                    ? Icons.visibility_rounded
+                                                    : Icons
+                                                        .visibility_off_rounded,
                                                 color:
                                                     FlutterFlowTheme.of(context)
                                                         .primaryText,
                                                 size: 24.0,
                                               ),
                                               trailingIconPresent: true,
+                                              onTrailingIconTap: () =>
+                                                  safeSetState(() =>
+                                                      _passwordVisible =
+                                                          !_passwordVisible),
                                               hint: '••••••••',
                                               value: _model.password,
-                                              obscureText: true,
+                                              obscureText: !_passwordVisible,
                                               variant: 'outlined',
                                               error: false,
                                             ),

@@ -20,6 +20,7 @@ class TextFieldWidget extends StatefulWidget {
     bool? leadingIconPresent,
     this.trailingIcon,
     bool? trailingIconPresent,
+    this.onTrailingIconTap,
     String? hint,
     String? value,
     this.onChanged,
@@ -46,6 +47,7 @@ class TextFieldWidget extends StatefulWidget {
   final bool leadingIconPresent;
   final Widget? trailingIcon;
   final bool trailingIconPresent;
+  final VoidCallback? onTrailingIconTap;
   final String hint;
   final String value;
   final ValueChanged<String>? onChanged;
@@ -503,7 +505,13 @@ class _TextFieldWidgetState extends State<TextFieldWidget> {
                     widget!.trailingIconPresent,
                     false,
                   ))
-                    widget!.trailingIcon!,
+                    widget!.onTrailingIconTap != null
+                        ? GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget!.onTrailingIconTap,
+                            child: widget!.trailingIcon!,
+                          )
+                        : widget!.trailingIcon!,
                 ].divide(SizedBox(width: 8.0)),
               ),
             ),
