@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/text_field/text_field_widget.dart';
 import '/components/training_mode_banner.dart';
@@ -122,7 +123,7 @@ class _ForcePasswordChangeWidgetState extends State<ForcePasswordChangeWidget> {
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
-                        child: Icon(Icons.lock_reset_rounded,
+                        child: Icon(LucideIcons.lockKeyhole,
                             color: FlutterFlowTheme.of(context).warning,
                             size: 36.0),
                       ),

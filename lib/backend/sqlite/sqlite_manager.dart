@@ -66,6 +66,9 @@ class SQLiteManager {
         reportCode: reportCode,
       );
 
+  Future<void> deleteLocalReport(String clientId) =>
+      performDeleteLocalReport(_database, clientId);
+
   Future<int> enqueueSyncItem({
     required String clientId,
     required String endpoint,

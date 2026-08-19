@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/text_field/text_field_widget.dart';
 import '/components/training_mode_banner.dart';
@@ -155,7 +156,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                     FlutterFlowIconButton(
                       borderRadius: 8.0,
                       buttonSize: 40.0,
-                      icon: Icon(Icons.arrow_back_rounded,
+                      icon: Icon(LucideIcons.arrowLeft,
                           color: FlutterFlowTheme.of(context).primaryText),
                       onPressed: () => context.pop(),
                     ),

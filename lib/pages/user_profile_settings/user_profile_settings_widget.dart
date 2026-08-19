@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'user_profile_settings_model.dart';
 export 'user_profile_settings_model.dart';
 
@@ -95,12 +96,12 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.photo_camera_rounded),
+              leading: Icon(LucideIcons.camera),
               title: Text('Ambil Foto'),
               onTap: () => Navigator.of(context).pop(ImageSource.camera),
             ),
             ListTile(
-              leading: Icon(Icons.photo_library_rounded),
+              leading: Icon(LucideIcons.images),
               title: Text('Pilih dari Galeri'),
               onTap: () => Navigator.of(context).pop(ImageSource.gallery),
             ),
@@ -508,7 +509,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                                       safeSetState(() {}),
                                                   child: ButtonWidget(
                                                     icon: Icon(
-                                                      Icons.storage_rounded,
+                                                      LucideIcons.hardDrive,
                                                       color:
                                                           FlutterFlowTheme.of(
                                                                   context)
@@ -593,7 +594,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                         tone: FlutterFlowTheme.of(context)
                                             .primary,
                                         icon: Icon(
-                                          Icons.person_outline_rounded,
+                                          LucideIcons.user,
                                           color: FlutterFlowTheme.of(context)
                                               .primaryText,
                                           size: 24.0,
@@ -612,7 +613,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                         tone: FlutterFlowTheme.of(context)
                                             .tertiary,
                                         icon: Icon(
-                                          Icons.security_rounded,
+                                          LucideIcons.shieldCheck,
                                           color: FlutterFlowTheme.of(context)
                                               .primaryText,
                                           size: 24.0,
@@ -663,7 +664,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
-                                    Icons.sync_rounded,
+                                    LucideIcons.refreshCw,
                                     color: FlutterFlowTheme.of(context)
                                         .primaryText,
                                     size: 20.0,
@@ -682,7 +683,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
-                                    Icons.campaign_rounded,
+                                    LucideIcons.megaphone,
                                     color: FlutterFlowTheme.of(context)
                                         .primaryText,
                                     size: 20.0,
@@ -701,7 +702,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
-                                    Icons.cloud_download_rounded,
+                                    LucideIcons.cloudDownload,
                                     color: FlutterFlowTheme.of(context)
                                         .primaryText,
                                     size: 20.0,
@@ -741,7 +742,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                           alignment:
                                               AlignmentDirectional(0.0, 0.0),
                                           child: Icon(
-                                            Icons.wifi_off_rounded,
+                                            LucideIcons.wifiOff,
                                             color: FlutterFlowTheme.of(context)
                                                 .primaryText,
                                             size: 20.0,
@@ -807,7 +808,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
-                                    Icons.help_outline_rounded,
+                                    LucideIcons.circleHelp,
                                     color: FlutterFlowTheme.of(context)
                                         .primaryText,
                                     size: 20.0,
@@ -821,12 +822,12 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                 model: _model.settingsItemModel6,
                                 updateCallback: () => safeSetState(() {}),
                                 child: SettingsItemWidget(
-                                  onTap: () => showSnackbar(
-                                      context, 'Privacy Policy coming soon'),
+                                  onTap: () => context.pushNamed(
+                                      PrivacyPolicyWidget.routeName),
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
-                                    Icons.description_rounded,
+                                    LucideIcons.fileText,
                                     color: FlutterFlowTheme.of(context)
                                         .primaryText,
                                     size: 20.0,
@@ -869,7 +870,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                                   safeSetState(() {}),
                                               child: ButtonWidget(
                                                 icon: Icon(
-                                                  Icons.logout_rounded,
+                                                  LucideIcons.logOut,
                                                   color: FlutterFlowTheme.of(
                                                           context)
                                                       .primaryText,

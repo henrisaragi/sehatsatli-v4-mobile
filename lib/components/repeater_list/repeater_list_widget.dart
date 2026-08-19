@@ -1,5 +1,6 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Generic add/remove row-list editor. This is a dumb renderer — the caller
 /// owns [items] and mutates it (typically via `setState`) inside [onAdd]/
@@ -53,7 +54,7 @@ class RepeaterListWidget<T> extends StatelessWidget {
                 children: [
                   Expanded(child: rowBuilder(context, i, items[i])),
                   IconButton(
-                    icon: Icon(Icons.close_rounded,
+                    icon: Icon(LucideIcons.x,
                         size: 20.0, color: FlutterFlowTheme.of(context).secondaryText),
                     onPressed: () => onRemove(i),
                     tooltip: 'Hapus',
@@ -64,7 +65,7 @@ class RepeaterListWidget<T> extends StatelessWidget {
           ),
         OutlinedButton.icon(
           onPressed: onAdd,
-          icon: Icon(Icons.add_rounded, size: 18.0),
+          icon: Icon(LucideIcons.plus, size: 18.0),
           label: Text(addLabel),
           style: OutlinedButton.styleFrom(
             foregroundColor: FlutterFlowTheme.of(context).primary,

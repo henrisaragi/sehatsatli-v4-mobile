@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/date_field/date_field_widget.dart';
 import '/components/multi_image_picker/multi_image_picker_widget.dart';
@@ -73,11 +74,8 @@ class _FullReportWidgetState extends State<FullReportWidget>
   List<Map<String, dynamic>> _animalTypes = [];
   List<Map<String, dynamic>> _ageGroups = [];
   List<Map<String, dynamic>> _clinicalSigns = [];
-  List<Map<String, dynamic>> _followUps = [];
   List<Map<String, dynamic>> _caseTypes = [];
   List<Map<String, dynamic>> _genders = [];
-  List<Map<String, dynamic>> _verificationActions = [];
-  List<Map<String, dynamic>> _labActions = [];
   List<Map<String, dynamic>> _conservationTypes = [];
   List<Map<String, dynamic>> _conservationInstitutions = [];
   List<Map<String, dynamic>> _uptTypes = [];
@@ -111,6 +109,16 @@ class _FullReportWidgetState extends State<FullReportWidget>
     return filtered.isNotEmpty ? filtered : _caseTypes;
   }
 
+  // ---- Tab 1 (Investigasi) is itself a 4-step wizard, one page per step
+  // (not a single long scroll) ----
+  static const List<String> _t1StepTitles = [
+    'Data Species',
+    'Tahap Investigasi',
+    'Data Administrasi — Lokasi',
+    'Data Administrasi — Pelapor',
+  ];
+  int _t1Step = 0;
+
   // ---- Tab 1 (Investigasi) field state ----
   String? _t1Category;
   bool _t1Protected = true;
@@ -140,6 +148,10 @@ class _FullReportWidgetState extends State<FullReportWidget>
   String? _t1ReporterOccupation;
   String? _t1ReporterPhone;
   String? _t1ReporterAddress;
+  // No UI to edit this — matches the web app's hidden `case_found` input
+  // (GeneralReportReporterSimpleForm.jsx), which only round-trips whatever
+  // value the report already has so re-saving from here doesn't wipe it.
+  String? _t1ReporterCaseFound;
 
   dynamic _t1UptId;
   String? _t1UptType;
@@ -319,11 +331,8 @@ class _FullReportWidgetState extends State<FullReportWidget>
     _animalTypes = extractOptionList(masters, ['animal_types']);
     _ageGroups = extractOptionList(masters, ['age_groups']);
     _clinicalSigns = extractOptionList(masters, ['clinical_signs']);
-    _followUps = extractOptionList(masters, ['follow_ups']);
     _caseTypes = extractOptionList(masters, ['case_types']);
     _genders = extractOptionList(masters, ['genders']);
-    _verificationActions = extractOptionList(masters, ['verification_actions']);
-    _labActions = extractOptionList(masters, ['lab_actions']);
     _conservationTypes = extractOptionList(masters, ['conservation_types']);
     _conservationInstitutions =
         extractOptionList(masters, ['conservation_institutions']);
@@ -419,6 +428,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
     _t1ReporterAddress = pick('address', from: reporter)?.toString() ??
         pick('address', from: upt)?.toString() ??
         userFields.address;
+    _t1ReporterCaseFound = pick('case_found', from: reporter)?.toString();
 
     // UPT auto-fill precedence: existing report data first, then the
     // logged-in user's own UPT (revisi.md bug note #2) — never left blank
@@ -555,7 +565,8 @@ class _FullReportWidgetState extends State<FullReportWidget>
     );
     if (confirmed != true) return;
     setState(() => _isDeleting = true);
-    final success = await ReportRepository().delete(_clientId!, token: token);
+    final success = await ReportRepository()
+        .delete(_clientId!, token: token, serverId: _serverId);
     if (!mounted) return;
     setState(() => _isDeleting = false);
     if (success) {
@@ -594,11 +605,18 @@ class _FullReportWidgetState extends State<FullReportWidget>
         _t1ConservationType == 'LK Umum' || _t1ConservationType == '2';
 
     final payload = <String, dynamic>{
-      'id': _serverId ?? 0,
+      // Omit `id` entirely on create — confirmed live 2026-08-12 that
+      // sending `id: 0` (i.e. `_serverId` still null, no report on the
+      // server yet) makes the backend respond `success: true, data: null`
+      // instead of creating the record. Only include it once a real
+      // `_serverId` exists (an update to an already-created report). See the
+      // doc comment on `ApiEndpoints.generalReportsSave`.
+      if (_serverId != null) 'id': _serverId,
       'creator': userId,
       'updater': userId,
-      'training':
-          user['trained'] == true || user['trained'] == 1 || user['trained'] == '1',
+      // Always false — the user has asked this app to never flag reports as
+      // training data, regardless of the account's own `trained` flag.
+      'training': false,
       'status': 1,
       'user_id': userId,
       'report_code': _reportCode ?? '',
@@ -615,6 +633,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
       'gender': _t1ReporterGender,
       'occupation': _t1ReporterOccupation ?? '',
       'phone': _t1ReporterPhone ?? '',
+      'case_found': _t1ReporterCaseFound ?? '',
       'address': _t1ReporterAddress ?? '',
       'reporter_id': userId,
       'upt_id': _t1UptId,
@@ -789,7 +808,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
                         FlutterFlowIconButton(
                           borderRadius: 8.0,
                           buttonSize: 40.0,
-                          icon: Icon(Icons.arrow_back_rounded,
+                          icon: Icon(LucideIcons.arrowLeft,
                               color: FlutterFlowTheme.of(context).primaryText),
                           onPressed: () => context.pop(),
                         ),
@@ -814,7 +833,7 @@ class _FullReportWidgetState extends State<FullReportWidget>
                     FlutterFlowIconButton(
                       borderRadius: 8.0,
                       buttonSize: 40.0,
-                      icon: Icon(Icons.delete_outline_rounded,
+                      icon: Icon(LucideIcons.trash2,
                           color: FlutterFlowTheme.of(context).error),
                       onPressed: _isDeleting ? null : _delete,
                     ),
@@ -885,16 +904,144 @@ class _FullReportWidgetState extends State<FullReportWidget>
   // Tab 1 — Investigasi
   // ---------------------------------------------------------------------
   Widget _buildTab1(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(24.0),
+    final steps = <Widget>[
+      _buildStepSpecies(context),
+      _buildStepInvestigasi(context),
+      _buildStepLokasi(context),
+      _buildStepPelapor(context),
+    ];
+    final isLastStep = _t1Step == steps.length - 1;
+    return Column(
+      children: [
+        _t1StepIndicator(context),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                steps[_t1Step],
+                if (isLastStep && _tab1Error != null) ...[
+                  SizedBox(height: 12.0),
+                  Text(_tab1Error!,
+                      style: FlutterFlowTheme.of(context)
+                          .bodySmall
+                          .override(color: FlutterFlowTheme.of(context).error)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        _t1StepNavBar(context, isLastStep),
+      ],
+    );
+  }
+
+  /// Tappable step circles + connecting lines + current step's title —
+  /// tapping a circle jumps straight to that step (no per-step validation
+  /// gate, matches this form's existing no-required-fields behavior).
+  Widget _t1StepIndicator(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      padding: EdgeInsetsDirectional.fromSTEB(24.0, 16.0, 24.0, 12.0),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        border: Border(bottom: BorderSide(color: theme.alternate)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Data Species',
-              style: FlutterFlowTheme.of(context)
-                  .titleMedium
-                  .override(fontWeight: FontWeight.bold)),
-          SizedBox(height: 12.0),
+          Row(
+            children: [
+              for (var i = 0; i < _t1StepTitles.length; i++) ...[
+                if (i > 0)
+                  Expanded(
+                    child: Container(
+                      height: 2.0,
+                      color: i <= _t1Step ? theme.primary : theme.alternate,
+                    ),
+                  ),
+                InkWell(
+                  onTap: () => setState(() => _t1Step = i),
+                  borderRadius: BorderRadius.circular(14.0),
+                  child: CircleAvatar(
+                    radius: 14.0,
+                    backgroundColor:
+                        i <= _t1Step ? theme.primary : theme.alternate,
+                    child: i < _t1Step
+                        ? Icon(LucideIcons.check, size: 16.0, color: theme.onPrimary)
+                        : Text('${i + 1}',
+                            style: theme.labelMedium.override(
+                              color: i == _t1Step
+                                  ? theme.onPrimary
+                                  : theme.secondaryText,
+                              fontWeight: FontWeight.bold,
+                            )),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: 8.0),
+          Text(
+            'Langkah ${_t1Step + 1} dari ${_t1StepTitles.length}: '
+            '${_t1StepTitles[_t1Step]}',
+            style: theme.titleSmall.override(fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Kembali" (hidden on the first step) + "Lanjut", swapping to the real
+  /// "Simpan Investigasi" save button once on the last step.
+  Widget _t1StepNavBar(BuildContext context, bool isLastStep) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      padding: EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        border: Border(top: BorderSide(color: theme.alternate)),
+      ),
+      child: Row(
+        children: [
+          if (_t1Step > 0) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => setState(() => _t1Step--),
+                child: Text('Kembali'),
+              ),
+            ),
+            SizedBox(width: 12.0),
+          ],
+          Expanded(
+            flex: 2,
+            child: isLastStep
+                ? _saveButton(
+                    label: 'Simpan Investigasi',
+                    isSaving: _savingTab1,
+                    onTap: _saveTab1,
+                  )
+                : ElevatedButton(
+                    onPressed: () => setState(() => _t1Step++),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.primary,
+                      foregroundColor: theme.onPrimary,
+                      padding: EdgeInsets.symmetric(vertical: 14.0),
+                    ),
+                    child: Text('Lanjut'),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Step 1: Data Species ----
+  Widget _buildStepSpecies(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           _switchField(
             label: 'Satwa Dilindungi?',
             value: _t1Protected,
@@ -971,12 +1118,15 @@ class _FullReportWidgetState extends State<FullReportWidget>
             keyboardType: TextInputType.number,
             onChanged: (v) => _t1Population = int.tryParse(v),
           ),
-          SizedBox(height: 20.0),
-          Text('Tahap Investigasi',
-              style: FlutterFlowTheme.of(context)
-                  .titleMedium
-                  .override(fontWeight: FontWeight.bold)),
-          SizedBox(height: 12.0),
+      ].divide(SizedBox(height: 16.0)),
+    );
+  }
+
+  // ---- Step 2: Tahap Investigasi ----
+  Widget _buildStepInvestigasi(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           DateFieldWidget(
             label: 'Tanggal Laporan',
             date: _t1ReportDate,
@@ -1046,11 +1196,14 @@ class _FullReportWidgetState extends State<FullReportWidget>
             value: _t1Sampling,
             onChanged: (v) => _t1Sampling = v,
           ),
-          _dropdown(
+          // `follow_up` is a free-text column on the backend (confirmed
+          // against the live web app: the master `follow_ups` list there is
+          // just tap-to-insert suggestion chips above a plain textarea, not
+          // an enum/FK) — must NOT be a master-data-id dropdown here.
+          _textField(
             label: 'Tindak Lanjut',
             value: _t1FollowUp,
-            options: _followUps,
-            onChanged: (v) => setState(() => _t1FollowUp = v?.toString()),
+            onChanged: (v) => _t1FollowUp = v,
           ),
           _dropdown(
             label: 'Kesimpulan Awal',
@@ -1071,44 +1224,15 @@ class _FullReportWidgetState extends State<FullReportWidget>
             newLocalPaths: _t1NewPhotoPaths,
             onLocalPathsChanged: (v) => setState(() => _t1NewPhotoPaths = v),
           ),
-          SizedBox(height: 20.0),
-          Text('Data Administrasi — Pelapor',
-              style: FlutterFlowTheme.of(context)
-                  .titleMedium
-                  .override(fontWeight: FontWeight.bold)),
-          SizedBox(height: 12.0),
-          _textField(
-            label: 'Nama Pelapor',
-            value: _t1ReporterName,
-            onChanged: (v) => _t1ReporterName = v,
-          ),
-          _dropdown(
-            label: 'Jenis Kelamin',
-            value: _t1ReporterGender,
-            options: _genders,
-            onChanged: (v) => setState(() => _t1ReporterGender = v?.toString()),
-          ),
-          _textField(
-            label: 'Pekerjaan',
-            value: _t1ReporterOccupation,
-            onChanged: (v) => _t1ReporterOccupation = v,
-          ),
-          _textField(
-            label: 'No. HP',
-            value: _t1ReporterPhone,
-            onChanged: (v) => _t1ReporterPhone = v,
-          ),
-          _textField(
-            label: 'Alamat',
-            value: _t1ReporterAddress,
-            onChanged: (v) => _t1ReporterAddress = v,
-          ),
-          SizedBox(height: 20.0),
-          Text('Data Administrasi — Lokasi',
-              style: FlutterFlowTheme.of(context)
-                  .titleMedium
-                  .override(fontWeight: FontWeight.bold)),
-          SizedBox(height: 12.0),
+      ].divide(SizedBox(height: 16.0)),
+    );
+  }
+
+  // ---- Step 3: Data Administrasi — Lokasi ----
+  Widget _buildStepLokasi(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           SimpleDropdownWidget(
             label: 'Tipe UPT',
             value: _t1UptType,
@@ -1142,18 +1266,28 @@ class _FullReportWidgetState extends State<FullReportWidget>
             onChanged: (v) => setState(() => _t1ConservationType = v?.toString()),
           ),
           if (_t1ConservationType == 'LK Khusus' || _t1ConservationType == '1') ...[
+            // Single-choice: picking a tag clears any typed "Lainnya" text
+            // and vice versa, so the two never disagree about which one
+            // choice is actually selected.
             TagMultiSelectWidget(
               label: 'Konservasi In-situ',
               options: _insituOptions,
               selectedIds: _t1Insitu,
               optionLabel: optionLabel,
               optionId: optionId,
-              onChanged: (v) => setState(() => _t1Insitu = v),
+              singleSelect: true,
+              onChanged: (v) => setState(() {
+                _t1Insitu = v;
+                if (v.isNotEmpty) _t1InsituOther = '';
+              }),
             ),
             _textField(
               label: 'In-situ Lainnya',
               value: _t1InsituOther,
-              onChanged: (v) => _t1InsituOther = v,
+              onChanged: (v) => setState(() {
+                _t1InsituOther = v;
+                if (v.isNotEmpty) _t1Insitu = [];
+              }),
             ),
           ],
           if (_t1ConservationType == 'LK Umum' || _t1ConservationType == '2') ...[
@@ -1163,12 +1297,19 @@ class _FullReportWidgetState extends State<FullReportWidget>
               selectedIds: _t1Exsitu,
               optionLabel: optionLabel,
               optionId: optionId,
-              onChanged: (v) => setState(() => _t1Exsitu = v),
+              singleSelect: true,
+              onChanged: (v) => setState(() {
+                _t1Exsitu = v;
+                if (v.isNotEmpty) _t1ExsituOther = '';
+              }),
             ),
             _textField(
               label: 'Ex-situ Lainnya',
               value: _t1ExsituOther,
-              onChanged: (v) => _t1ExsituOther = v,
+              onChanged: (v) => setState(() {
+                _t1ExsituOther = v;
+                if (v.isNotEmpty) _t1Exsitu = [];
+              }),
             ),
           ],
           _dropdown(
@@ -1237,24 +1378,45 @@ class _FullReportWidgetState extends State<FullReportWidget>
                     height: 16,
                     width: 16,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(Icons.refresh_rounded, size: 16.0),
+                : Icon(LucideIcons.refreshCw, size: 16.0),
             label: Text('Perbarui Lokasi GPS'),
           ),
-          if (_tab1Error != null) ...[
-            SizedBox(height: 12.0),
-            Text(_tab1Error!,
-                style: FlutterFlowTheme.of(context)
-                    .bodySmall
-                    .override(color: FlutterFlowTheme.of(context).error)),
-          ],
-          SizedBox(height: 20.0),
-          _saveButton(
-            label: 'Simpan Investigasi',
-            isSaving: _savingTab1,
-            onTap: _saveTab1,
+      ].divide(SizedBox(height: 16.0)),
+    );
+  }
+
+  // ---- Step 4: Data Administrasi — Pelapor ----
+  Widget _buildStepPelapor(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+          _textField(
+            label: 'Nama Pelapor',
+            value: _t1ReporterName,
+            onChanged: (v) => _t1ReporterName = v,
           ),
-        ].divide(SizedBox(height: 16.0)),
-      ),
+          _dropdown(
+            label: 'Jenis Kelamin',
+            value: _t1ReporterGender,
+            options: _genders,
+            onChanged: (v) => setState(() => _t1ReporterGender = v?.toString()),
+          ),
+          _textField(
+            label: 'Pekerjaan',
+            value: _t1ReporterOccupation,
+            onChanged: (v) => _t1ReporterOccupation = v,
+          ),
+          _textField(
+            label: 'No. HP',
+            value: _t1ReporterPhone,
+            onChanged: (v) => _t1ReporterPhone = v,
+          ),
+          _textField(
+            label: 'Alamat',
+            value: _t1ReporterAddress,
+            onChanged: (v) => _t1ReporterAddress = v,
+          ),
+      ].divide(SizedBox(height: 16.0)),
     );
   }
 
@@ -1298,11 +1460,13 @@ class _FullReportWidgetState extends State<FullReportWidget>
             onChanged: (v) => _t2Sampling = v,
             variant: 'outlined',
           ),
-          _dropdown(
+          // `action` is a free-text column on the backend (same tap-to-insert
+          // suggestion-chips-over-a-textarea pattern as Tab 1's `follow_up`),
+          // not a master-data-id dropdown.
+          _textField(
             label: 'Tindakan',
-            value: _t2Action,
-            options: _verificationActions,
-            onChanged: (v) => setState(() => _t2Action = v),
+            value: _t2Action?.toString(),
+            onChanged: (v) => _t2Action = v,
           ),
           TextFieldWidget(
             label: 'Informasi Dokter',
@@ -1393,11 +1557,12 @@ class _FullReportWidgetState extends State<FullReportWidget>
             onChanged: (v) => _t3FinalDiagnosis = v,
             variant: 'outlined',
           ),
-          _dropdown(
+          // Same as Tab 1/Tab 2 — `follow_up` here ("Aksi Lanjutan" on the
+          // web) is a free-text column, not a master-data-id dropdown.
+          _textField(
             label: 'Tindak Lanjut',
-            value: _t3FollowUp,
-            options: _labActions,
-            onChanged: (v) => setState(() => _t3FollowUp = v),
+            value: _t3FollowUp?.toString(),
+            onChanged: (v) => _t3FollowUp = v,
           ),
           if (_tab3Error != null)
             Text(_tab3Error!,

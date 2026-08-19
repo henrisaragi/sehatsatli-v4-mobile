@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/training_mode_banner.dart';
@@ -108,7 +109,7 @@ class _NotificationInboxWidgetState extends State<NotificationInboxWidget> {
       children: [
         SizedBox(height: 96.0),
         Icon(
-          Icons.notifications_none_rounded,
+          LucideIcons.bell,
           color: FlutterFlowTheme.of(context).secondaryText,
           size: 56.0,
         ),

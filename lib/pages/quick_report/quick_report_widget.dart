@@ -104,10 +104,15 @@ class _QuickReportWidgetState extends State<QuickReportWidget> {
 
     final clientId = ReportRepository().newClientId();
     final payload = <String, dynamic>{
-      'id': 0,
+      // Never send `id` on create — confirmed live 2026-08-12 that sending
+      // even `id: 0` (this is always a brand-new report) makes the backend
+      // respond `success: true, data: null` instead of actually creating
+      // the record. See the doc comment on `ApiEndpoints.generalReportsSave`.
       'creator': userId,
       'updater': userId,
-      'training': user['trained'] == true || user['trained'] == 1 || user['trained'] == '1',
+      // Always false — the user has asked this app to never flag reports as
+      // training data, regardless of the account's own `trained` flag.
+      'training': false,
       'status': 1,
       'user_id': userId,
       'report_code': '',

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/action_card/action_card_widget.dart';
 import '/components/button/button_widget.dart';
@@ -187,7 +188,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                       borderRadius: 8.0,
                       buttonSize: 44.0,
                       fillColor: Colors.transparent,
-                      icon: Icon(Icons.account_circle_rounded,
+                      icon: Icon(LucideIcons.circleUserRound,
                           color: FlutterFlowTheme.of(context).primaryText,
                           size: 28.0),
                       onPressed: () =>
@@ -236,7 +237,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         padding: EdgeInsets.all(16.0),
         child: Row(
           children: [
-            Icon(Icons.sync_problem_rounded,
+            Icon(LucideIcons.cloudAlert,
                 color: FlutterFlowTheme.of(context).secondary, size: 20.0),
             SizedBox(width: 16.0),
             Expanded(
@@ -300,7 +301,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                 borderRadius: BorderRadius.circular(12.0),
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.bar_chart_rounded,
+              child: Icon(LucideIcons.barChart3,
                   color: FlutterFlowTheme.of(context).info, size: 22.0),
             ),
             SizedBox(width: 16.0),
@@ -346,7 +347,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
           child: ActionCardWidget(
             onTap: () => context.pushNamed(QuickReportWidget.routeName),
             tone: FlutterFlowTheme.of(context).primary,
-            icon: Icon(Icons.assignment_rounded,
+            icon: Icon(LucideIcons.clipboardList,
                 color: FlutterFlowTheme.of(context).primaryText, size: 24.0),
             title: 'General Report',
           ),
@@ -389,7 +390,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             padding: EdgeInsets.all(24.0),
             child: Column(
               children: [
-                Icon(Icons.history_rounded,
+                Icon(LucideIcons.history,
                     color: FlutterFlowTheme.of(context).accent3, size: 48.0),
                 SizedBox(height: 16.0),
                 Text('No recent reports',
@@ -445,6 +446,17 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   }
 }
 
+/// `local_reports.updated_at`/`created_at` are stored as full ISO-8601
+/// timestamps with microsecond precision (e.g. `2026-08-12T02:37:07.723297`)
+/// — far too long to fit `ReportItemWidget`'s single-line date row and the
+/// direct cause of a `RenderFlex` overflow on Beranda for any draft/pending
+/// report. Falls back to the raw string if it doesn't parse (defensive, not
+/// expected to happen — this column is always device-generated).
+String _formatLocalDate(String raw) {
+  final parsed = DateTime.tryParse(raw);
+  return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed) : raw;
+}
+
 class _RecentItem {
   _RecentItem({
     required this.species,
@@ -461,7 +473,7 @@ class _RecentItem {
     return _RecentItem(
       species: 'Draf laporan',
       status: status,
-      date: row.updatedAt ?? row.createdAt,
+      date: _formatLocalDate(row.updatedAt ?? row.createdAt),
       serverId: row.serverId,
       clientId: row.clientId,
     );

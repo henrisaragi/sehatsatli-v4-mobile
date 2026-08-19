@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/report_card/report_card_widget.dart';
@@ -234,7 +235,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                               ? FlutterFlowTheme.of(context).accent2
                               : Colors.transparent,
                           icon: Icon(
-                            Icons.school_rounded,
+                            LucideIcons.graduationCap,
                             color: _showTraining
                                 ? FlutterFlowTheme.of(context).warning
                                 : FlutterFlowTheme.of(context).primaryText,
@@ -252,7 +253,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                       label: '',
                       labelPresent: false,
                       hint: 'Cari spesies...',
-                      leadingIcon: Icon(Icons.search_rounded,
+                      leadingIcon: Icon(LucideIcons.search,
                           color: FlutterFlowTheme.of(context).primaryText,
                           size: 20.0),
                       leadingIconPresent: true,
@@ -290,7 +291,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                           ? ListView(
                               children: [
                                 SizedBox(height: 96.0),
-                                Icon(Icons.inventory_2_rounded,
+                                Icon(LucideIcons.package,
                                     color: FlutterFlowTheme.of(context)
                                         .secondaryText,
                                     size: 48.0),
@@ -328,14 +329,14 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                 }
                                 final item = items[index];
                                 return ReportCardWidget(
-                                  icon: Icon(Icons.pets_rounded,
+                                  icon: Icon(LucideIcons.pawPrint,
                                       color:
                                           FlutterFlowTheme.of(context).primary,
                                       size: 24.0),
                                   species: item.species,
                                   status: item.status,
                                   date: item.date,
-                                  location: item.location,
+                                  reportCode: item.reportCode,
                                   onTap: () {
                                     if (item.serverId == null) {
                                       // Not synced yet (draft/pending/failed)
@@ -373,12 +374,20 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   }
 }
 
+/// `local_reports.updated_at`/`created_at` are stored as full ISO-8601
+/// timestamps with microsecond precision — see the identical helper in
+/// `dashboard_widget.dart` for why this is needed (RenderFlex overflow).
+String _formatLocalDate(String raw) {
+  final parsed = DateTime.tryParse(raw);
+  return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed) : raw;
+}
+
 class _HistoryItem {
   _HistoryItem({
     required this.species,
     required this.status,
     required this.date,
-    required this.location,
+    required this.reportCode,
     this.serverId,
     this.clientId,
   });
@@ -390,28 +399,26 @@ class _HistoryItem {
     return _HistoryItem(
       species: 'Draf laporan',
       status: status,
-      date: row.updatedAt ?? row.createdAt,
-      location: row.reportCode ?? row.clientId,
+      date: _formatLocalDate(row.updatedAt ?? row.createdAt),
+      reportCode: row.reportCode ?? row.clientId,
       serverId: row.serverId,
       clientId: row.clientId,
     );
   }
 
+  // Matches the web list at `laporan-umum` (columns: Kode Laporan, Nama
+  // Spesies, Tanggal Laporan) — report code instead of location.
   factory _HistoryItem.server(Map<String, dynamic> report) {
     final species = report['species'];
     final speciesName = species is Map && species['species_name'] != null
         ? species['species_name'].toString()
         : (report['species_name'] ?? 'Spesies tidak diketahui').toString();
-    final location = report['locations'];
-    final locationName = location is Map && location['location_name'] != null
-        ? location['location_name'].toString()
-        : (report['location_name'] ?? '-').toString();
     final isProtected = species is Map && species['protected'] == true;
     return _HistoryItem(
       species: speciesName,
       status: isProtected ? 'Prioritas' : 'Synced',
       date: (report['report_date'] ?? '').toString(),
-      location: locationName,
+      reportCode: (report['report_code'] ?? '-').toString(),
       serverId: report['id'],
     );
   }
@@ -419,7 +426,7 @@ class _HistoryItem {
   final String species;
   final String status;
   final String date;
-  final String location;
+  final String reportCode;
   final dynamic serverId;
   final String? clientId;
 }

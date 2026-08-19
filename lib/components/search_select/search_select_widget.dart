@@ -1,5 +1,6 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Select2-style searchable picker: the field itself just displays the
 /// current selection and opens a bottom sheet with a search box + filtered
@@ -72,7 +73,7 @@ class SearchSelectWidget extends StatelessWidget {
                         ),
                   ),
                 ),
-                Icon(Icons.search,
+                Icon(LucideIcons.search,
                     size: 18.0, color: FlutterFlowTheme.of(context).secondaryText),
               ],
             ),
@@ -131,7 +132,7 @@ class SearchSelectWidget extends StatelessWidget {
                         }),
                         decoration: InputDecoration(
                           hintText: hint,
-                          prefixIcon: Icon(Icons.search),
+                          prefixIcon: Icon(LucideIcons.search),
                           filled: true,
                           fillColor: FlutterFlowTheme.of(context).secondaryBackground,
                           border: OutlineInputBorder(

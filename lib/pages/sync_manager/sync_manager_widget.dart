@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/sync_item/sync_item_widget.dart';
 import '/components/training_mode_banner.dart';
@@ -136,7 +137,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
                   FlutterFlowIconButton(
                     borderRadius: 8.0,
                     buttonSize: 40.0,
-                    icon: Icon(Icons.arrow_back_rounded,
+                    icon: Icon(LucideIcons.arrowLeft,
                         color: FlutterFlowTheme.of(context).primaryText),
                     onPressed: () => context.pop(),
                   ),
@@ -280,7 +281,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.check_circle_rounded,
+                                      Icon(LucideIcons.circleCheckBig,
                                           color: FlutterFlowTheme.of(context)
                                               .success,
                                           size: 20.0),
@@ -291,7 +292,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
                                             style: FlutterFlowTheme.of(context)
                                                 .bodyMedium),
                                       ),
-                                      Icon(Icons.cloud_done_rounded,
+                                      Icon(LucideIcons.cloudCheck,
                                           color: FlutterFlowTheme.of(context)
                                               .success,
                                           size: 18.0),

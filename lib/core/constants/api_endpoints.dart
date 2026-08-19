@@ -22,8 +22,14 @@ abstract class ApiEndpoints {
   // unscoped duplicates.
   static const String saveGeneralReportMobile =
       'api/general-reports/saveGeneralReportMobile';
-  static const String deleteGeneralReportMobile =
-      'api/general-reports/deleteGeneralReportMobile';
+  // CORRECTED 2026-08-12 — the documented `deleteGeneralReportMobile` (body
+  // `{client_id}`) was never actually wired into anything on the backend;
+  // confirmed against the live web app (`sehatsatli-v2-extranet`,
+  // `generalReportSlice.js`'s `deleteGeneralReport`) that the real endpoint
+  // is the plain `general-reports/delete` taking `{id: <numeric server id>}`
+  // — same "*Mobile-suffixed docs are wrong, plain web-style endpoint is
+  // right" pattern already found for `generalReportsSave` above.
+  static const String generalReportsDelete = 'api/general-reports/delete';
   static const String getGeneralReportMobile =
       'api/general-reports/getGeneralReportMobile';
   // Confirmed live 2026-08-08 against production: returns a much broader/
@@ -41,19 +47,27 @@ abstract class ApiEndpoints {
   // create form and Full Report Tab 1 (Investigasi) update — see
   // revisi.md.
   //
-  // ⚠️ CONFIRMED LIVE BUG (2026-08-08, production): a successful create
-  // (`success: true`) responds with `"data": null` — no `id`, no
-  // `report_code`. The app correctly leaves `server_id` unset in this case
-  // (see `applyServerResultToLocalReport`), so the report stays stuck
-  // showing "Menunggu sinkronisasi" forever even though the queue marks it
-  // done. Repeated live tests (multiple distinct `species_name` values,
-  // multiple submissions) found the created report **never appears** in
-  // `generalReportsGetAll` either, by id or by search — strong signal the
-  // backend isn't actually persisting a queryable record, not just omitting
-  // it from the response. This needs a backend-side fix; nothing on the
-  // Flutter side can compensate for a response with no id and a report that
-  // never surfaces in any list/search. Tabs 2-4 use the three per-section
+  // ⚠️ ROOT CAUSE FOUND AND FIXED (2026-08-12): the 2026-08-08 "confirmed
+  // live bug" note below (kept for history) misdiagnosed this as a backend
+  // problem. It was actually the client sending an explicit `id: 0` on
+  // *create* (no report on the server yet) — isolated by replaying the
+  // live web app's (`sehatsatli-v2-extranet`) exact minimal working payload
+  // via the browser console, then re-adding Flutter's extra fields one at a
+  // time: `general-reports/save` responds `success: true, data: null`
+  // whenever the request body includes an `id` key at all when there's no
+  // real report yet, and creates correctly the moment that key is omitted
+  // — every other extra field Flutter sends (`creator`/`updater`/`training`/
+  // `status`/`user_id`/`report_code`/`reporter_id`/`protected_species`) was
+  // confirmed harmless in isolation. Both `quick_report_widget.dart` and
+  // `full_report_widget.dart`'s Tab 1 submit now omit `id` entirely unless
+  // a real `_serverId` already exists. Tabs 2-4 use the three per-section
   // endpoints below instead of resubmitting the whole report.
+  //
+  // Original (2026-08-08) note, kept for context: a successful create
+  // (`success: true`) responded with `"data": null` — no `id`, no
+  // `report_code` — and the created report never appeared in
+  // `generalReportsGetAll` either, by id or by search, which at the time
+  // looked like the backend silently not persisting anything.
   static const String generalReportsSave = 'api/general-reports/save';
   // Full Report Tab 2/3/4 — per-section save endpoints (revisi.md §2),
   // verified live against production. Each takes a flat payload (not

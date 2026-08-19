@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
-
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_response_helper.dart';
@@ -29,17 +27,12 @@ class AuthRepository {
   final ApiClient _apiClient;
   final SecureStorage _secureStorage;
 
-  String _md5Hex(String input) => md5.convert(utf8.encode(input)).toString();
-
   Future<AuthResult> login(String email, String password) async {
-    // Confirmed against the live API: despite CLAUDE.md §6.1 describing
-    // `username` for email and `username1` for phone, the server actually
-    // expects the email hash under `username1`.
     final response = await _apiClient.post(
       ApiEndpoints.loginApp,
       body: {
-        'username1': _md5Hex(email),
-        'password': _md5Hex(password),
+        'email': email,
+        'password': password,
       },
     );
 

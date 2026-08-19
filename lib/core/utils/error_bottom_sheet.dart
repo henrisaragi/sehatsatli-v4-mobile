@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/flutter_flow/flutter_flow_theme.dart';
 
@@ -18,7 +19,7 @@ Future<void> showErrorBottomSheet(BuildContext context, String message) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded,
+            Icon(LucideIcons.circleAlert,
                 color: FlutterFlowTheme.of(context).error, size: 40.0),
             SizedBox(height: 12.0),
             Text(

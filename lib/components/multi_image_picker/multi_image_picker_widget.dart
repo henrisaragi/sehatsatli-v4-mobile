@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Variable-length photo picker: existing server media (display-only) plus
 /// newly-picked local files (to be base64-encoded and embedded in the save
@@ -51,12 +52,12 @@ class MultiImagePickerWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.photo_camera_rounded),
+              leading: Icon(LucideIcons.camera),
               title: Text('Ambil Foto'),
               onTap: () => Navigator.of(context).pop(ImageSource.camera),
             ),
             ListTile(
-              leading: Icon(Icons.photo_library_rounded),
+              leading: Icon(LucideIcons.images),
               title: Text('Pilih dari Galeri'),
               onTap: () => Navigator.of(context).pop(ImageSource.gallery),
             ),
@@ -149,7 +150,7 @@ class MultiImagePickerWidget extends StatelessWidget {
                             color: Colors.black54,
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(Icons.close_rounded,
+                          child: Icon(LucideIcons.x,
                               size: 14.0, color: Colors.white),
                         ),
                       ),
@@ -168,7 +169,7 @@ class MultiImagePickerWidget extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12.0),
                   border: Border.all(color: FlutterFlowTheme.of(context).alternate),
                 ),
-                child: Icon(Icons.add_a_photo_rounded,
+                child: Icon(LucideIcons.imagePlus,
                     color: FlutterFlowTheme.of(context).secondaryText),
               ),
             ),
@@ -183,7 +184,7 @@ class MultiImagePickerWidget extends StatelessWidget {
       width: 100.0,
       height: 100.0,
       color: FlutterFlowTheme.of(context).secondaryBackground,
-      child: Icon(Icons.image_not_supported_rounded,
+      child: Icon(LucideIcons.imageOff,
           color: FlutterFlowTheme.of(context).secondaryText),
     );
   }

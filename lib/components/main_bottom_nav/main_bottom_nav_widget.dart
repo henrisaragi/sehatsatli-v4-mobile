@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/nav_item/nav_item_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -52,7 +53,7 @@ class MainBottomNavWidget extends StatelessWidget {
                 NavItemWidget(
                   label: 'Beranda',
                   icon: Icon(
-                    Icons.home_rounded,
+                    LucideIcons.house,
                     color: currentTab == MainTab.beranda
                         ? FlutterFlowTheme.of(context).primary
                         : FlutterFlowTheme.of(context).secondaryText,
@@ -63,7 +64,7 @@ class MainBottomNavWidget extends StatelessWidget {
                 NavItemWidget(
                   label: 'Laporan',
                   icon: Icon(
-                    Icons.list_alt_rounded,
+                    LucideIcons.listChecks,
                     color: currentTab == MainTab.laporan
                         ? FlutterFlowTheme.of(context).primary
                         : FlutterFlowTheme.of(context).secondaryText,
@@ -76,7 +77,7 @@ class MainBottomNavWidget extends StatelessWidget {
                 NavItemWidget(
                   label: 'Notifikasi',
                   icon: Icon(
-                    Icons.notifications_rounded,
+                    LucideIcons.bell,
                     color: currentTab == MainTab.notifikasi
                         ? FlutterFlowTheme.of(context).primary
                         : FlutterFlowTheme.of(context).secondaryText,
@@ -87,7 +88,7 @@ class MainBottomNavWidget extends StatelessWidget {
                 NavItemWidget(
                   label: 'Profil',
                   icon: Icon(
-                    Icons.person_rounded,
+                    LucideIcons.user,
                     color: currentTab == MainTab.profil
                         ? FlutterFlowTheme.of(context).primary
                         : FlutterFlowTheme.of(context).secondaryText,
@@ -119,7 +120,7 @@ class MainBottomNavWidget extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Icon(
-                    Icons.add_rounded,
+                    LucideIcons.plus,
                     color: FlutterFlowTheme.of(context).onSecondary,
                     size: 28.0,
                   ),

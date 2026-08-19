@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'bottom_nav2_model.dart';
 export 'bottom_nav2_model.dart';
 
@@ -69,7 +70,7 @@ class _BottomNav2WidgetState extends State<BottomNav2Widget> {
                     child: NavItemWidget(
                       label: 'Home',
                       icon: Icon(
-                        Icons.dashboard_rounded,
+                        LucideIcons.layoutDashboard,
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),
@@ -83,7 +84,7 @@ class _BottomNav2WidgetState extends State<BottomNav2Widget> {
                     child: NavItemWidget(
                       label: 'Map',
                       icon: Icon(
-                        Icons.map_rounded,
+                        LucideIcons.map,
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),
@@ -97,7 +98,7 @@ class _BottomNav2WidgetState extends State<BottomNav2Widget> {
                     child: NavItemWidget(
                       label: 'Report',
                       icon: Icon(
-                        Icons.add_circle_rounded,
+                        LucideIcons.circlePlus,
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),
@@ -111,7 +112,7 @@ class _BottomNav2WidgetState extends State<BottomNav2Widget> {
                     child: NavItemWidget(
                       label: 'History',
                       icon: Icon(
-                        Icons.history_rounded,
+                        LucideIcons.history,
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),
@@ -125,7 +126,7 @@ class _BottomNav2WidgetState extends State<BottomNav2Widget> {
                     child: NavItemWidget(
                       label: 'Profile',
                       icon: Icon(
-                        Icons.person_rounded,
+                        LucideIcons.user,
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'sync_item_model.dart';
 export 'sync_item_model.dart';
 
@@ -193,7 +194,7 @@ class _SyncItemWidgetState extends State<SyncItemWidget> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.error_outline_rounded,
+                          LucideIcons.circleAlert,
                           color: FlutterFlowTheme.of(context).error,
                           size: 16.0,
                         ),
@@ -256,7 +257,7 @@ class _SyncItemWidgetState extends State<SyncItemWidget> {
                         updateCallback: () => safeSetState(() {}),
                         child: ButtonWidget(
                           icon: Icon(
-                            Icons.sync_rounded,
+                            LucideIcons.refreshCw,
                             color: FlutterFlowTheme.of(context).primaryText,
                             size: 24.0,
                           ),

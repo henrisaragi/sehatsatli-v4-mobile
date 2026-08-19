@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/text_field/text_field_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -138,7 +139,7 @@ class _CommunityReportWidgetState extends State<CommunityReportWidget> {
                     FlutterFlowIconButton(
                       borderRadius: 8.0,
                       buttonSize: 40.0,
-                      icon: Icon(Icons.arrow_back_rounded,
+                      icon: Icon(LucideIcons.arrowLeft,
                           color: FlutterFlowTheme.of(context).primaryText),
                       onPressed: () => context.pop(),
                     ),
@@ -212,7 +213,7 @@ class _CommunityReportWidgetState extends State<CommunityReportWidget> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.info_outline_rounded,
+              Icon(LucideIcons.info,
                   color: FlutterFlowTheme.of(context).info, size: 20.0),
               SizedBox(width: 12.0),
               Expanded(
@@ -250,7 +251,7 @@ class _CommunityReportWidgetState extends State<CommunityReportWidget> {
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today_rounded,
+                Icon(LucideIcons.calendar,
                     size: 18.0, color: FlutterFlowTheme.of(context).primaryText),
                 SizedBox(width: 12.0),
                 Text(
@@ -310,7 +311,7 @@ class _CommunityReportWidgetState extends State<CommunityReportWidget> {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: Icon(Icons.check_rounded,
+          child: Icon(LucideIcons.check,
               color: FlutterFlowTheme.of(context).success, size: 48.0),
         ),
         SizedBox(height: 24.0),

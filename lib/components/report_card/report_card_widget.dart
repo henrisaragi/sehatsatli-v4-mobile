@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'report_card_model.dart';
 export 'report_card_model.dart';
 
@@ -17,18 +18,18 @@ class ReportCardWidget extends StatefulWidget {
     String? species,
     String? status,
     String? date,
-    String? location,
+    String? reportCode,
   })  : this.species = species ?? '',
         this.status = status ?? '',
         this.date = date ?? '',
-        this.location = location ?? '';
+        this.reportCode = reportCode ?? '';
 
   final VoidCallback? onTap;
   final Widget? icon;
   final String species;
   final String status;
   final String date;
-  final String location;
+  final String reportCode;
 
   @override
   State<ReportCardWidget> createState() => _ReportCardWidgetState();
@@ -225,14 +226,14 @@ class _ReportCardWidgetState extends State<ReportCardWidget> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.location_on_rounded,
+                            LucideIcons.qrCode,
                             color: FlutterFlowTheme.of(context).secondaryText,
                             size: 14.0,
                           ),
                           Expanded(
                             flex: 1,
                             child: Text(
-                              widget!.location,
+                              widget!.reportCode,
                               maxLines: 1,
                               style: FlutterFlowTheme.of(context)
                                   .bodySmall

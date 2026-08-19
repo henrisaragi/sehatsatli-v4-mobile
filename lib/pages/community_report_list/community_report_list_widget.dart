@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/training_mode_banner.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -161,7 +162,7 @@ class _CommunityReportListWidgetState extends State<CommunityReportListWidget> {
                     FlutterFlowIconButton(
                       borderRadius: 8.0,
                       buttonSize: 40.0,
-                      icon: Icon(Icons.arrow_back_rounded,
+                      icon: Icon(LucideIcons.arrowLeft,
                           color: FlutterFlowTheme.of(context).primaryText),
                       onPressed: () => context.pop(),
                     ),
@@ -189,7 +190,7 @@ class _CommunityReportListWidgetState extends State<CommunityReportListWidget> {
                         ? ListView(
                             children: [
                               SizedBox(height: 96.0),
-                              Icon(Icons.inventory_2_rounded,
+                              Icon(LucideIcons.package,
                                   color: FlutterFlowTheme.of(context)
                                       .secondaryText,
                                   size: 48.0),

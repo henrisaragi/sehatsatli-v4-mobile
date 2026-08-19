@@ -241,13 +241,30 @@ class ReportRepository {
     }
   }
 
-  Future<bool> delete(String clientId, {required String token}) async {
-    final response = await _apiClient.post(
-      ApiEndpoints.deleteGeneralReportMobile,
-      body: {'client_id': clientId},
-      token: token,
-    );
-    return isApiSuccess(response);
+  /// [serverId] null means the report never made it to the server (a local
+  /// draft still "Menunggu sinkronisasi") — nothing to delete remotely, just
+  /// drop the local row and any queued sync job for it. Otherwise deletes
+  /// server-side first (matching the live web app's `general-reports/delete`
+  /// contract — `{id: serverId}`, not `{client_id}`) and only clears the
+  /// local row once that succeeds, so a failed/offline delete leaves the
+  /// report intact instead of silently going out of sync with the server.
+  Future<bool> delete(
+    String clientId, {
+    required String token,
+    int? serverId,
+  }) async {
+    if (serverId != null) {
+      final response = await _apiClient.post(
+        ApiEndpoints.generalReportsDelete,
+        body: {'id': serverId},
+        token: token,
+      );
+      if (!isApiSuccess(response)) return false;
+    }
+    if (!kIsWeb) {
+      await SQLiteManager.instance.deleteLocalReport(clientId);
+    }
+    return true;
   }
 
   /// [training] maps to the `{ id: 1|0 }` body flag API_ENDPOINTS.md §3

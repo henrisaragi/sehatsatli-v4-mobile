@@ -20,6 +20,7 @@ class TagMultiSelectWidget extends StatelessWidget {
     required this.optionLabel,
     required this.optionId,
     required this.onChanged,
+    this.singleSelect = false,
   });
 
   final String label;
@@ -28,6 +29,11 @@ class TagMultiSelectWidget extends StatelessWidget {
   final String Function(Map<String, dynamic>) optionLabel;
   final dynamic Function(Map<String, dynamic>) optionId;
   final ValueChanged<List<dynamic>> onChanged;
+  /// When true, selecting a chip replaces the whole selection instead of
+  /// toggling it on top of the existing one (used for Konservasi In-situ/
+  /// Ex-situ, which are radio-like "pick one" fields despite reusing this
+  /// chip-based widget).
+  final bool singleSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +60,10 @@ class TagMultiSelectWidget extends StatelessWidget {
               label: Text(optionLabel(opt)),
               selected: isSelected,
               onSelected: (v) {
+                if (singleSelect) {
+                  onChanged(v ? [id] : <dynamic>[]);
+                  return;
+                }
                 final next = List<dynamic>.from(selectedIds);
                 if (v) {
                   next.add(id);

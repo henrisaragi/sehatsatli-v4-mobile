@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'settings_item_model.dart';
 export 'settings_item_model.dart';
 
@@ -147,7 +148,7 @@ class _SettingsItemWidgetState extends State<SettingsItemWidget> {
                   ),
                 ),
                 Icon(
-                  Icons.chevron_right_rounded,
+                  LucideIcons.chevronRight,
                   color: FlutterFlowTheme.of(context).secondaryText,
                   size: 20.0,
                 ),

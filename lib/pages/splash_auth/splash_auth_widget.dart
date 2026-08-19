@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'splash_auth_model.dart';
 export 'splash_auth_model.dart';
 
@@ -194,7 +195,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                     ),
                                     alignment: AlignmentDirectional(0.0, 0.0),
                                     child: Icon(
-                                      Icons.health_and_safety_rounded,
+                                      LucideIcons.heartPulse,
                                       color: FlutterFlowTheme.of(context)
                                           .onSurface,
                                       size: 60.0,
@@ -366,7 +367,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                           helper: '',
                                           helperPresent: false,
                                           leadingIcon: Icon(
-                                            Icons.email_rounded,
+                                            LucideIcons.mail,
                                             color: FlutterFlowTheme.of(context)
                                                 .primaryText,
                                             size: 24.0,
@@ -396,7 +397,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                               helper: '',
                                               helperPresent: false,
                                               leadingIcon: Icon(
-                                                Icons.lock_rounded,
+                                                LucideIcons.lock,
                                                 color:
                                                     FlutterFlowTheme.of(context)
                                                         .primaryText,
@@ -405,7 +406,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                               leadingIconPresent: true,
                                               trailingIcon: Icon(
                                                 _passwordVisible
-                                                    ? Icons.visibility_rounded
+                                                    ? LucideIcons.eye
                                                     : Icons
                                                         .visibility_off_rounded,
                                                 color:
@@ -638,7 +639,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                                   CrossAxisAlignment.center,
                                               children: [
                                                 Icon(
-                                                  Icons.wifi_off_rounded,
+                                                  LucideIcons.wifiOff,
                                                   color: FlutterFlowTheme.of(
                                                           context)
                                                       .onSurface,

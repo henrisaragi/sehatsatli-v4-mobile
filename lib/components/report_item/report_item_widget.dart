@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'report_item_model.dart';
 export 'report_item_model.dart';
 
@@ -97,7 +98,7 @@ class _ReportItemWidgetState extends State<ReportItemWidget> {
                 ),
                 alignment: AlignmentDirectional(0.0, 0.0),
                 child: Icon(
-                  Icons.pets_rounded,
+                  LucideIcons.pawPrint,
                   color: FlutterFlowTheme.of(context).secondaryText,
                   size: 24.0,
                 ),
@@ -132,8 +133,11 @@ class _ReportItemWidgetState extends State<ReportItemWidget> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
+                        Flexible(
+                          child: Text(
                           widget!.idCode,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                           style: FlutterFlowTheme.of(context)
                               .labelSmall
                               .override(
@@ -156,6 +160,7 @@ class _ReportItemWidgetState extends State<ReportItemWidget> {
                                     .fontStyle,
                                 lineHeight: 1.27,
                               ),
+                          ),
                         ),
                         Text(
                           '•',
@@ -180,8 +185,11 @@ class _ReportItemWidgetState extends State<ReportItemWidget> {
                                     lineHeight: 1.27,
                                   ),
                         ),
-                        Text(
+                        Flexible(
+                          child: Text(
                           widget!.date,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                           style: FlutterFlowTheme.of(context)
                               .labelSmall
                               .override(
@@ -204,6 +212,7 @@ class _ReportItemWidgetState extends State<ReportItemWidget> {
                                     .fontStyle,
                                 lineHeight: 1.27,
                               ),
+                          ),
                         ),
                       ].divide(SizedBox(width: 4.0)),
                     ),

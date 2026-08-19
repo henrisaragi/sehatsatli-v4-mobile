@@ -132,6 +132,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => SyncManagerWidget(),
         ),
         FFRoute(
+          name: PrivacyPolicyWidget.routeName,
+          path: PrivacyPolicyWidget.routePath,
+          builder: (context, params) => PrivacyPolicyWidget(),
+        ),
+        FFRoute(
           name: UserProfileSettingsWidget.routeName,
           path: UserProfileSettingsWidget.routePath,
           builder: (context, params) => UserProfileSettingsWidget(),

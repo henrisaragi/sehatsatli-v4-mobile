@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'profile_header_model.dart';
 export 'profile_header_model.dart';
 
@@ -300,7 +301,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                 ),
                 alignment: AlignmentDirectional(0.0, 0.0),
                 child: Icon(
-                  Icons.camera_alt_rounded,
+                  LucideIcons.camera,
                   color: FlutterFlowTheme.of(context).info,
                   size: 14.0,
                 ),

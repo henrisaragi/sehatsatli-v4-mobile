@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -19,7 +20,7 @@ class TrainingModeBanner extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.school_rounded,
+          Icon(LucideIcons.graduationCap,
               color: FlutterFlowTheme.of(context).warning, size: 16.0),
           const SizedBox(width: 8.0),
           Expanded(

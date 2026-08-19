@@ -47,6 +47,25 @@ Future<void> performUpsertLocalReport(
   );
 }
 
+/// Removes the local cache row and any queued (not-yet-sent) sync jobs for
+/// this report — without clearing the queue too, a stale `sync_queue` entry
+/// for an already-deleted report would resurrect it on the next drain.
+Future<void> performDeleteLocalReport(
+  Database database,
+  String clientId,
+) async {
+  await database.delete(
+    'sync_queue',
+    where: 'client_id = ?',
+    whereArgs: [clientId],
+  );
+  await database.delete(
+    'local_reports',
+    where: 'client_id = ?',
+    whereArgs: [clientId],
+  );
+}
+
 Future<int> performEnqueueSyncItem(
   Database database, {
   required String clientId,

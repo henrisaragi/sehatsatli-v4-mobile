@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'photo_slot_model.dart';
 export 'photo_slot_model.dart';
 
@@ -64,7 +65,7 @@ class _PhotoSlotWidgetState extends State<PhotoSlotWidget> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
-            Icons.add_a_photo_rounded,
+            LucideIcons.imagePlus,
             color: FlutterFlowTheme.of(context).secondaryText,
             size: 24.0,
           ),
