@@ -9,13 +9,24 @@ build/
 *.ipr
 *.iws
 
-# Android
+# Android signing / credentials
 android/.gradle
 android/captures/
 android/local.properties
 android/**/GeneratedPluginRegistrant.java
-android/key.properties
+**/key.properties
 *.jks
+*.keystore
+
+# iOS signing / credentials
+*.p12
+*.mobileprovision
+*.cer
+
+# Secrets / environment files
+.env
+.env.*
+*.pem
 
 # iOS
 ios/Flutter/ephemeral/
