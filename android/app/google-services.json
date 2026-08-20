@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "1094819312551",
-    "project_id": "sehatsatli-b0aa8",
-    "storage_bucket": "sehatsatli-b0aa8.firebasestorage.app"
+    "project_number": "705876697991",
+    "project_id": "sehatsatli-906b3",
+    "storage_bucket": "sehatsatli-906b3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1094819312551:android:b41e9ef76ac1c7eb22fc82",
+        "mobilesdk_app_id": "1:705876697991:android:b9d79f985af9f412a2a922",
         "android_client_info": {
-          "package_name": "id.kehutanan.sehatsatli"
+          "package_name": "id.sehatsatli.kehutanan"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBtmgqK6zCGOk_InUAuLoLPwl_nS3-W7sw"
+          "current_key": "AIzaSyBy_nbqd5TQG76aYokJmm2XGwoHXQkFj-g"
         }
       ],
       "services": {

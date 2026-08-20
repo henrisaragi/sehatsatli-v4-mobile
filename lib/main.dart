@@ -106,7 +106,8 @@ class _MyAppState extends State<MyApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [Locale('en', '')],
+      locale: const Locale('id', ''),
+      supportedLocales: const [Locale('id', '')],
       theme: ThemeData(
         brightness: Brightness.light,
         useMaterial3: false,
