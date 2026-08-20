@@ -5,6 +5,16 @@
 
 ---
 
+# Workspace Project Folder
+
+### Backend project folder
+
+```
+
+```
+
+---
+
 ## 1. Project Overview & Architecture Principles
 
 SehatSatli is a mobile application used by field officers, wildlife veterinarians, and conservation agencies (KLHK, BKSDA, Taman Nasional, LU/LK) for wildlife health surveillance, reporting, and case investigation.

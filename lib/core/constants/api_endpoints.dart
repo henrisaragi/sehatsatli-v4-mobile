@@ -7,6 +7,12 @@ abstract class ApiEndpoints {
   // actually "change password while logged in" (body: { password }), not a
   // classic OTP/email reset flow.
   static const String changePassword = 'api/auth/forgot-password';
+  // Guest "lupa password" flow — docs/reset-password.md. Unauthenticated,
+  // email-based OTP reset, distinct from `changePassword` above (which
+  // requires an existing session).
+  static const String passwordOtpRequest = 'api/auth/password/otp/request';
+  static const String passwordOtpVerify = 'api/auth/password/otp/verify';
+  static const String passwordOtpReset = 'api/auth/password/otp/reset';
 
   // Master data / lookups — API_ENDPOINTS.md §2. All Bearer-token, cached
   // locally (master_cache table) since payloads are large and mostly static.

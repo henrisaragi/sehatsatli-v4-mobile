@@ -433,19 +433,33 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.center,
                                             children: [
-                                              wrapWithModel(
-                                                model: _model.buttonModel1,
-                                                updateCallback: () =>
-                                                    safeSetState(() {}),
-                                                child: ButtonWidget(
-                                                  iconPresent: false,
-                                                  iconEndPresent: false,
-                                                  content: 'Forgot Password?',
-                                                  variant: 'ghost',
-                                                  size: 'small',
-                                                  fullWidth: false,
-                                                  loading: false,
-                                                  disabled: false,
+                                              InkWell(
+                                                splashColor:
+                                                    Colors.transparent,
+                                                focusColor:
+                                                    Colors.transparent,
+                                                hoverColor:
+                                                    Colors.transparent,
+                                                highlightColor:
+                                                    Colors.transparent,
+                                                onTap: () => context.pushNamed(
+                                                    ForgotPasswordWidget
+                                                        .routeName),
+                                                child: wrapWithModel(
+                                                  model: _model.buttonModel1,
+                                                  updateCallback: () =>
+                                                      safeSetState(() {}),
+                                                  child: ButtonWidget(
+                                                    iconPresent: false,
+                                                    iconEndPresent: false,
+                                                    content:
+                                                        'Forgot Password?',
+                                                    variant: 'ghost',
+                                                    size: 'small',
+                                                    fullWidth: false,
+                                                    loading: false,
+                                                    disabled: false,
+                                                  ),
                                                 ),
                                               ),
                                             ],

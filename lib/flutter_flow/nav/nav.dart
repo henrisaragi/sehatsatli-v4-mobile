@@ -39,8 +39,12 @@ class AppStateNotifier extends ChangeNotifier {
   }
 }
 
-Set<String> get _kPublicRoutePaths =>
-    {'/', SplashAuthWidget.routePath, CommunityReportWidget.routePath};
+Set<String> get _kPublicRoutePaths => {
+      '/',
+      SplashAuthWidget.routePath,
+      CommunityReportWidget.routePath,
+      ForgotPasswordWidget.routePath,
+    };
 
 GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
       initialLocation: '/',
@@ -82,6 +86,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: CommunityReportWidget.routeName,
           path: CommunityReportWidget.routePath,
           builder: (context, params) => CommunityReportWidget(),
+        ),
+        FFRoute(
+          name: ForgotPasswordWidget.routeName,
+          path: ForgotPasswordWidget.routePath,
+          builder: (context, params) => ForgotPasswordWidget(),
         ),
         FFRoute(
           name: CommunityReportListWidget.routeName,

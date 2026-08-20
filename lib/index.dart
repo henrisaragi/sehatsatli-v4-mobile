@@ -7,6 +7,8 @@ export '/pages/dashboard/dashboard_widget.dart' show DashboardWidget;
 export '/pages/edit_profile/edit_profile_widget.dart' show EditProfileWidget;
 export '/pages/force_password_change/force_password_change_widget.dart'
     show ForcePasswordChangeWidget;
+export '/pages/forgot_password/forgot_password_widget.dart'
+    show ForgotPasswordWidget;
 export '/pages/quick_report/quick_report_widget.dart' show QuickReportWidget;
 export '/pages/notification_inbox/notification_inbox_widget.dart'
     show NotificationInboxWidget;

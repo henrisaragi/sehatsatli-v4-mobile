@@ -19,6 +19,13 @@ class AuthResult {
   final String? message;
 }
 
+class OtpResult {
+  OtpResult({required this.success, this.message});
+
+  final bool success;
+  final String? message;
+}
+
 class AuthRepository {
   AuthRepository({ApiClient? apiClient, SecureStorage? secureStorage})
       : _apiClient = apiClient ?? ApiClient(),
@@ -115,5 +122,54 @@ class AuthRepository {
       return AuthResult(success: false, message: extractApiMessage(response));
     }
     return AuthResult(success: true);
+  }
+
+  /// Step 1 of the guest OTP reset flow (docs/reset-password.md) — emails a
+  /// one-time code to [email]. Unauthenticated, no token.
+  Future<OtpResult> requestPasswordOtp(String email) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.passwordOtpRequest,
+      body: {'email': email},
+    );
+    if (!isApiSuccess(response)) {
+      return OtpResult(success: false, message: extractApiMessage(response));
+    }
+    return OtpResult(success: true);
+  }
+
+  /// Step 2 — verifies the OTP emailed in [requestPasswordOtp] before the
+  /// user is allowed to set a new password.
+  Future<OtpResult> verifyPasswordOtp(String email, String otp) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.passwordOtpVerify,
+      body: {'email': email, 'otp': otp},
+    );
+    if (!isApiSuccess(response)) {
+      return OtpResult(success: false, message: extractApiMessage(response));
+    }
+    return OtpResult(success: true);
+  }
+
+  /// Step 3 — sets the new password using the same verified [email]/[otp]
+  /// pair.
+  Future<OtpResult> resetPasswordWithOtp(
+    String email,
+    String otp,
+    String password,
+    String passwordConfirmation,
+  ) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.passwordOtpReset,
+      body: {
+        'email': email,
+        'otp': otp,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
+    if (!isApiSuccess(response)) {
+      return OtpResult(success: false, message: extractApiMessage(response));
+    }
+    return OtpResult(success: true);
   }
 }
