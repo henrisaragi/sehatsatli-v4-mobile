@@ -109,6 +109,35 @@ class ReportRepository {
           ? response['data'] as Map<String, dynamic>
           : response;
 
+      // Guard against the `success: true, data: null` anomaly documented on
+      // `ApiEndpoints.generalReportsSave` — the specific 2026-08-12 trigger
+      // (sending `id: 0` on create) is fixed at the call sites, but nothing
+      // stops this response shape from recurring for some other reason. If
+      // we can't confirm a real server id (either just returned, or already
+      // known from a prior successful sync of this report), don't trust
+      // `success: true` blindly: marking it 'synced' anyway would hide the
+      // report from the local-drafts fallback (it's filtered out once
+      // synced) while it was never actually persisted server-side, making it
+      // silently vanish from every list. Treat it as failed instead so it
+      // stays visible and retryable.
+      final existing = !kIsWeb ? await SQLiteManager.instance.getLocalReport(clientId) : null;
+      if (data['id'] == null && existing?.serverId == null) {
+        const message =
+            'Server tidak mengonfirmasi ID laporan — kemungkinan tidak tersimpan. Coba kirim ulang.';
+        if (queueId != null) {
+          await SQLiteManager.instance.markSyncItemFailed(queueId, message);
+        }
+        if (!kIsWeb) {
+          await applyServerResultToLocalReport(
+            clientId: clientId,
+            outgoingPayload: payloadWithId,
+            responseData: const {},
+            syncStatus: 'failed',
+          );
+        }
+        return ReportSubmitResult(status: ReportSubmitStatus.failed, message: message);
+      }
+
       if (queueId != null) {
         await SQLiteManager.instance.markSyncItemDone(queueId);
       }

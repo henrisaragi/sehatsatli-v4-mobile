@@ -65,6 +65,29 @@ class SyncRepository {
             final data = response['data'] is Map<String, dynamic>
                 ? response['data'] as Map<String, dynamic>
                 : response;
+
+            // Same guard as `ReportRepository.submit()` against the
+            // `success: true, data: null` anomaly documented on
+            // `ApiEndpoints.generalReportsSave` — this drained-queue path
+            // hits the same endpoint for reports that were queued offline,
+            // so it needs the same protection against silently marking a
+            // never-actually-created report 'synced'. `body['id']` covers
+            // both an update/section-save that already carried a known id
+            // and a fresh create that legitimately omits it.
+            final existingServerId = body['id'] as int?;
+            if (data['id'] == null && existingServerId == null) {
+              const message =
+                  'Server tidak mengonfirmasi ID laporan — kemungkinan tidak tersimpan.';
+              await SQLiteManager.instance.markSyncItemFailed(item.id, message);
+              await applyServerResultToLocalReport(
+                clientId: item.clientId,
+                outgoingPayload: outgoingPayload,
+                responseData: const {},
+                syncStatus: 'failed',
+              );
+              continue;
+            }
+
             await SQLiteManager.instance.markSyncItemDone(item.id);
             await applyServerResultToLocalReport(
               clientId: item.clientId,

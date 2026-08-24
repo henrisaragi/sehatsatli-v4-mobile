@@ -72,10 +72,16 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   Future<void> _loadLocalReports() async {
     if (kIsWeb) return;
     try {
+      // Load every local row, including already-`synced` ones — this table
+      // is the only offline-first fallback source we have (there's no
+      // separate read-through cache of server-fetched reports), so when the
+      // server fetch below fails we still need previously-synced reports to
+      // show up instead of an empty list. Duplicates against a successful
+      // server fetch are filtered out in `_combinedItems` instead of here.
       final rows = await SQLiteManager.instance.getAllLocalReports();
       if (!mounted) return;
       setState(() {
-        _localReports = rows.where((r) => r.syncStatus != 'synced').toList();
+        _localReports = rows;
       });
     } catch (_) {
       // sqflite unavailable (e.g. web) — local drafts just won't show.
@@ -117,7 +123,13 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
       if (!mounted) return;
       setState(() {
         if (result.errorMessage != null) {
-          _errorMessage = result.errorMessage;
+          // Deliberately not surfacing the raw backend message here (e.g. a
+          // generic Laravel "Server Error" string) — it reads like the app
+          // itself is broken. The local fallback in `_combinedItems` below
+          // still renders whatever's cached; this is only seen when that's
+          // also empty.
+          _errorMessage =
+              'Tidak bisa memuat laporan dari server. Menampilkan data lokal yang tersimpan.';
         } else {
           _serverReports.addAll(result.reports);
           _hasMore = result.hasMore;
@@ -146,7 +158,17 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
     final query = FFAppState().historySearchQuery.trim().toLowerCase();
     final filter = FFAppState().historyFilter;
 
-    final local = _localReports.map((r) => _HistoryItem.local(r)).toList();
+    // A local row that's already `synced` and also present in the server
+    // fetch would otherwise show up twice (once with the minimal local
+    // snapshot, once with the richer server copy) — drop the local copy
+    // whenever the server fetch actually returned that report. Rows that
+    // aren't in the server result (offline, fetch failed, or just not synced
+    // yet) still show from local data.
+    final serverIds = _serverReports.map((r) => _asInt(r['id'])).whereType<int>().toSet();
+    final local = _localReports
+        .where((r) => r.serverId == null || !serverIds.contains(r.serverId))
+        .map((r) => _HistoryItem.local(r))
+        .toList();
     final server = _serverReports.map((r) => _HistoryItem.server(r)).toList();
     final all = [...local, ...server];
 
@@ -381,6 +403,8 @@ String _formatLocalDate(String raw) {
   final parsed = DateTime.tryParse(raw);
   return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed) : raw;
 }
+
+int? _asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : null);
 
 class _HistoryItem {
   _HistoryItem({

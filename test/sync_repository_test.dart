@@ -66,6 +66,31 @@ void main() {
   });
 
   test(
+      'submit() treats a `success: true, data: null` response as failed '
+      'instead of marking a report with no confirmed server id as synced '
+      '(regression: this exact shape previously caused newly-created '
+      'reports to vanish — success:true so nothing looked wrong, but no '
+      'id ever came back, so the report was invisible both server-side '
+      'and in the local drafts list once wrongly marked synced)', () async {
+    final client = MockClient((request) async {
+      return http.Response(jsonEncode({'success': true, 'data': null}), 200);
+    });
+    final repo = ReportRepository(apiClient: ApiClient(client: client));
+    const clientId = 'test-client-phantom-success';
+    final payload = {'report_date': '2026-01-01', 'description': 'test'};
+
+    final result =
+        await repo.submit(clientId: clientId, payload: payload, token: 'tok');
+
+    expect(result.status, ReportSubmitStatus.failed);
+
+    final localRows = await SQLiteManager.instance.getAllLocalReports();
+    final row = localRows.firstWhere((r) => r.clientId == clientId);
+    expect(row.syncStatus, 'failed');
+    expect(row.serverId, isNull);
+  });
+
+  test(
       'runSyncQueue() marks a successfully-synced item done and updates '
       'local_reports to synced with the server id/report code', () async {
     const clientId = 'test-client-sync-success';
@@ -142,6 +167,41 @@ void main() {
     final second = queued.firstWhere((r) => r.clientId == secondClientId);
     expect(first.retryCount, 1); // the one attempt that failed
     expect(second.retryCount, 0); // never even attempted — loop broke first
+  });
+
+  test(
+      'runSyncQueue() applies the same data:null guard as submit() when '
+      'draining a queued create — marks the item failed rather than done, '
+      'and the local row stays out of \'synced\'', () async {
+    const clientId = 'test-client-phantom-success-queued';
+    await SQLiteManager.instance.upsertLocalReport(
+      clientId: clientId,
+      payloadJson: jsonEncode({'client_id': clientId}),
+      syncStatus: 'pending',
+    );
+    final queueId = await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: 'api/general-reports/save',
+      payloadJson: jsonEncode({'client_id': clientId}),
+    );
+
+    final client = MockClient((request) async {
+      if (request.url.path.contains('ping')) {
+        return http.Response(jsonEncode({'success': true}), 200);
+      }
+      return http.Response(jsonEncode({'success': true, 'data': null}), 200);
+    });
+
+    FFAppState().accessToken = 'tok';
+    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+
+    final stillPending = await SQLiteManager.instance.getPendingSyncQueue();
+    expect(stillPending.where((r) => r.id == queueId), isEmpty); // not left pending
+
+    final localRows = await SQLiteManager.instance.getAllLocalReports();
+    final row = localRows.firstWhere((r) => r.clientId == clientId);
+    expect(row.syncStatus, 'failed');
+    expect(row.serverId, isNull);
   });
 
   test(
