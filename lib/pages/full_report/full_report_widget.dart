@@ -797,47 +797,50 @@ class _FullReportWidgetState extends State<FullReportWidget>
                   bottom:
                       BorderSide(color: FlutterFlowTheme.of(context).alternate)),
             ),
-            child: Padding(
-              padding: EdgeInsetsDirectional.fromSTEB(8.0, 30.0, 20.0, 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        FlutterFlowIconButton(
-                          borderRadius: 8.0,
-                          buttonSize: 40.0,
-                          icon: Icon(LucideIcons.arrowLeft,
-                              color: FlutterFlowTheme.of(context).primaryText),
-                          onPressed: () => context.pop(),
-                        ),
-                        Expanded(
-                          child: Text(
-                            _reportCode != null && _reportCode!.isNotEmpty
-                                ? 'KODE LAPORAN: $_reportCode'
-                                : 'Menunggu sinkronisasi',
-                            overflow: TextOverflow.ellipsis,
-                            style: FlutterFlowTheme.of(context).titleLarge.override(
-                                  font: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.bold),
-                                  color: FlutterFlowTheme.of(context).primaryText,
-                                  fontWeight: FontWeight.bold,
-                                ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsetsDirectional.fromSTEB(8.0, 22.0, 20.0, 20.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          FlutterFlowIconButton(
+                            borderRadius: 8.0,
+                            buttonSize: 40.0,
+                            icon: Icon(LucideIcons.arrowLeft,
+                                color: FlutterFlowTheme.of(context).primaryText),
+                            onPressed: () => context.pop(),
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: Text(
+                              _reportCode != null && _reportCode!.isNotEmpty
+                                  ? 'KODE LAPORAN: $_reportCode'
+                                  : 'Menunggu sinkronisasi',
+                              overflow: TextOverflow.ellipsis,
+                              style: FlutterFlowTheme.of(context).titleLarge.override(
+                                    font: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold),
+                                    color: FlutterFlowTheme.of(context).primaryText,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (_clientId != null)
-                    FlutterFlowIconButton(
-                      borderRadius: 8.0,
-                      buttonSize: 40.0,
-                      icon: Icon(LucideIcons.trash2,
-                          color: FlutterFlowTheme.of(context).error),
-                      onPressed: _isDeleting ? null : _delete,
-                    ),
-                ],
+                    if (_clientId != null)
+                      FlutterFlowIconButton(
+                        borderRadius: 8.0,
+                        buttonSize: 40.0,
+                        icon: Icon(LucideIcons.trash2,
+                            color: FlutterFlowTheme.of(context).error),
+                        onPressed: _isDeleting ? null : _delete,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -220,15 +220,18 @@ class _NotificationInboxWidgetState extends State<NotificationInboxWidget> {
                   bottom: BorderSide(
                       color: FlutterFlowTheme.of(context).alternate)),
             ),
-            child: Padding(
-              padding: EdgeInsetsDirectional.fromSTEB(20.0, 34.0, 20.0, 20.0),
-              child: Text(
-                'Notifikasi',
-                style: FlutterFlowTheme.of(context).headlineSmall.override(
-                      font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                      color: FlutterFlowTheme.of(context).primaryText,
-                      fontWeight: FontWeight.bold,
-                    ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 20.0),
+                child: Text(
+                  'Notifikasi',
+                  style: FlutterFlowTheme.of(context).headlineSmall.override(
+                        font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                        color: FlutterFlowTheme.of(context).primaryText,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
               ),
             ),
           ),

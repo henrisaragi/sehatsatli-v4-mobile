@@ -155,18 +155,20 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                     bottom: BorderSide(
                         color: FlutterFlowTheme.of(context).alternate)),
               ),
-              child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(20.0, 34.0, 20.0, 20.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'SehatSatli',
-                          style: FlutterFlowTheme.of(context)
-                              .headlineSmall
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SehatSatli',
+                            style: FlutterFlowTheme.of(context)
+                                .headlineSmall
                               .override(
                                 font: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w800),
@@ -195,6 +197,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                           context.goNamed(UserProfileSettingsWidget.routeName),
                     ),
                   ],
+                ),
                 ),
               ),
             ),

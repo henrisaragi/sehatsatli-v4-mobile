@@ -231,16 +231,18 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                     bottom: BorderSide(
                         color: FlutterFlowTheme.of(context).alternate)),
               ),
-              child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(20.0, 30.0, 20.0, 12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Laporan Kasus',
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 12.0, 20.0, 12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Laporan Kasus',
                           style: FlutterFlowTheme.of(context)
                               .headlineSmall
                               .override(
@@ -300,6 +302,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                       ),
                     ),
                   ],
+                ),
                 ),
               ),
             ),

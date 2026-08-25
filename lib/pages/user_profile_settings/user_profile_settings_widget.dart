@@ -244,7 +244,8 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-        body: Container(
+        body: SafeArea(
+          bottom: false,
           child: Column(
             mainAxisSize: MainAxisSize.max,
             children: [

@@ -149,27 +149,30 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                     bottom: BorderSide(
                         color: FlutterFlowTheme.of(context).alternate)),
               ),
-              child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(8.0, 30.0, 20.0, 20.0),
-                child: Row(
-                  children: [
-                    FlutterFlowIconButton(
-                      borderRadius: 8.0,
-                      buttonSize: 40.0,
-                      icon: Icon(LucideIcons.arrowLeft,
-                          color: FlutterFlowTheme.of(context).primaryText),
-                      onPressed: () => context.pop(),
-                    ),
-                    Text(
-                      'Edit Profile',
-                      style: FlutterFlowTheme.of(context).titleLarge.override(
-                            font: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold),
-                            color: FlutterFlowTheme.of(context).primaryText,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ],
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsetsDirectional.fromSTEB(8.0, 22.0, 20.0, 20.0),
+                  child: Row(
+                    children: [
+                      FlutterFlowIconButton(
+                        borderRadius: 8.0,
+                        buttonSize: 40.0,
+                        icon: Icon(LucideIcons.arrowLeft,
+                            color: FlutterFlowTheme.of(context).primaryText),
+                        onPressed: () => context.pop(),
+                      ),
+                      Text(
+                        'Edit Profile',
+                        style: FlutterFlowTheme.of(context).titleLarge.override(
+                              font: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold),
+                              color: FlutterFlowTheme.of(context).primaryText,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

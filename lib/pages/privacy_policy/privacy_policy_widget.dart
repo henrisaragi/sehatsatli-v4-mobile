@@ -33,26 +33,29 @@ class PrivacyPolicyWidget extends StatelessWidget {
               color: theme.secondaryBackground,
               border: Border(bottom: BorderSide(color: theme.alternate)),
             ),
-            child: Padding(
-              padding: EdgeInsetsDirectional.fromSTEB(8.0, 30.0, 20.0, 20.0),
-              child: Row(
-                children: [
-                  FlutterFlowIconButton(
-                    borderRadius: 8.0,
-                    buttonSize: 40.0,
-                    icon: Icon(LucideIcons.arrowLeft, color: theme.primaryText),
-                    onPressed: () => context.safePop(),
-                  ),
-                  SizedBox(width: 4.0),
-                  Text(
-                    'Kebijakan Privasi',
-                    style: theme.titleLarge.override(
-                      font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                      color: theme.primaryText,
-                      fontWeight: FontWeight.bold,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsetsDirectional.fromSTEB(8.0, 22.0, 20.0, 20.0),
+                child: Row(
+                  children: [
+                    FlutterFlowIconButton(
+                      borderRadius: 8.0,
+                      buttonSize: 40.0,
+                      icon: Icon(LucideIcons.arrowLeft, color: theme.primaryText),
+                      onPressed: () => context.safePop(),
                     ),
-                  ),
-                ],
+                    SizedBox(width: 4.0),
+                    Text(
+                      'Kebijakan Privasi',
+                      style: theme.titleLarge.override(
+                        font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                        color: theme.primaryText,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
