@@ -47,4 +47,10 @@ abstract class ApiEndpoints {
   static const String laporanFoto = 'laporan/{laporan}/foto';
 
   static const String dashboardRingkasan = 'dashboard/ringkasan';
+
+  // In-app notifications + FCM device registration.
+  static const String notifikasi = 'notifikasi';
+  static const String notifikasiBacaSemua = 'notifikasi/baca-semua';
+  static const String notifikasiPerangkat = 'notifikasi/perangkat';
+  static String notifikasiBaca(String id) => 'notifikasi/$id/baca';
 }

@@ -114,6 +114,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           ),
         ),
         FFRoute(
+          name: NotificationsWidget.routeName,
+          path: NotificationsWidget.routePath,
+          builder: (context, params) => NotificationsWidget(),
+        ),
+        FFRoute(
           name: ReportHistoryWidget.routeName,
           path: ReportHistoryWidget.routePath,
           builder: (context, params) => ReportHistoryWidget(),

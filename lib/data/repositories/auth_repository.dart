@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_response_helper.dart';
+import '../../core/network/push_service.dart';
 import '../../core/storage/secure_storage.dart';
 
 class PasswordResetResult {
@@ -217,6 +218,8 @@ class AuthRepository {
   }
 
   Future<void> _revokeToken(String token) async {
+    // Must run before the token is revoked: it authenticates the request.
+    await PushService.instance.unregisterForUser(token);
     try {
       // A 401 here only means the old token is already dead — it must not
       // trigger the global session handler, which could log out a session

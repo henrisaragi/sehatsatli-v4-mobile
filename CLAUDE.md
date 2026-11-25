@@ -252,6 +252,8 @@ Backend v4 (Laravel, `/Users/henrisaragi/Herd/sehatsatli-v4`) is the source of t
 | Stage updates             | `PUT laporan/{id}/investigasi`, `/verifikasi-dokter`, `/hasil-lab`         | each advances `tahap`                                       |
 | Photos                    | `POST laporan/{id}/foto/sign-upload`, `POST laporan/{id}/foto`, `DELETE …` | MinIO presigned PUT                                         |
 | Dashboard                 | `dashboard/ringkasan`                                                      | `{nasional, entitas: [{nama_entitas, total}]}`              |
+| Notifikasi                | `notifikasi`, `notifikasi/{id}/baca`, `notifikasi/baca-semua`              | `unread_count` for the bell badge                           |
+| Push (FCM) device         | `POST` / `DELETE notifikasi/perangkat {token, platform}`                   | registered on login (`PushService`), removed on logout      |
 
 There is **no** delete endpoint for laporan: only reports that never reached the server can be removed (locally).
 

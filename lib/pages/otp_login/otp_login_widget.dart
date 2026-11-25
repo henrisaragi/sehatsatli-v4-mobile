@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/components/text_field/text_field_widget.dart';
 import '/core/network/api_client.dart';
+import '/core/network/push_service.dart';
 import '/core/utils/error_bottom_sheet.dart';
 import '/data/repositories/auth_repository.dart';
 import '/data/repositories/master_repository.dart';
@@ -105,6 +106,7 @@ class _OtpLoginWidgetState extends State<OtpLoginWidget> {
       FFAppState().accessToken = token;
       FFAppState().currentUser = await AuthRepository().fetchCurrentUser(token);
       MasterRepository().refreshAll(token: token);
+      PushService.instance.registerForUser(token);
 
       final status = await AuthRepository().fetchRegistrationStatus(token);
       if (!mounted) return;

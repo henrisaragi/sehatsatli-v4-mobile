@@ -2,6 +2,7 @@ import '/components/app_loading_indicator.dart';
 import '/components/button/button_widget.dart';
 import '/components/text_field/text_field_widget.dart';
 import '/core/network/api_client.dart';
+import '/core/network/push_service.dart';
 import '/data/repositories/auth_repository.dart';
 import '/data/repositories/master_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -60,6 +61,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
     // Fire-and-forget: don't block navigation on a network round-trip —
     // dropdowns just fall back to whatever's already cached if this fails.
     MasterRepository().refreshAll(token: token);
+    PushService.instance.registerForUser(token);
     if (!mounted) return;
     context.goNamed(DashboardWidget.routeName);
   }

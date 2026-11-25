@@ -14,6 +14,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/push_service.dart';
 import '../../data/models/report_list_item.dart';
 import '../../data/repositories/dashboard_repository.dart';
 import '../../data/repositories/report_repository.dart';
@@ -47,6 +48,12 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     super.initState();
     _model = createModel(context, () => DashboardModel());
     _load();
+    // A push tapped before login/splash finished opens once the dashboard is up.
+    final pendingLaporanId = PushService.instance.takePendingLaporanId();
+    if (pendingLaporanId != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => PushService.instance.openLaporan(pendingLaporanId));
+    }
   }
 
   @override
@@ -81,6 +88,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         _serverReports = [];
       }
       _summary = await DashboardRepository().fetchRingkasan(token: token);
+      PushService.instance.refreshUnreadCount(token);
     }
 
     if (!mounted) return;
@@ -171,16 +179,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                         ),
                       ],
                     ),
-                    FlutterFlowIconButton(
-                      borderRadius: 8.0,
-                      buttonSize: 44.0,
-                      fillColor: Colors.transparent,
-                      icon: Icon(LucideIcons.circleUserRound,
-                          color: FlutterFlowTheme.of(context).primaryText,
-                          size: 28.0),
-                      onPressed: () =>
-                          context.goNamed(UserProfileSettingsWidget.routeName),
-                    ),
+                    _notificationBell(),
                   ],
                 ),
                 ),
@@ -212,6 +211,59 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         bottomNavigationBar: MainBottomNavWidget(
           currentTab: MainTab.beranda,
           onQuickReportClosed: _load,
+        ),
+      ),
+    );
+  }
+
+  Widget _notificationBell() {
+    final theme = FlutterFlowTheme.of(context);
+    return ValueListenableBuilder<int>(
+      valueListenable: PushService.instance.unreadCount,
+      builder: (context, unread, _) => Semantics(
+        button: true,
+        label: unread > 0 ? 'Notifikasi, $unread belum dibaca' : 'Notifikasi',
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            FlutterFlowIconButton(
+              borderRadius: 8.0,
+              buttonSize: 44.0,
+              fillColor: Colors.transparent,
+              icon: Icon(LucideIcons.bell, color: theme.primaryText, size: 26.0),
+              onPressed: () async {
+                await context.pushNamed(NotificationsWidget.routeName);
+                final token = FFAppState().accessToken;
+                if (token != null) PushService.instance.refreshUnreadCount(token);
+              },
+            ),
+            if (unread > 0)
+              Positioned(
+                right: 4.0,
+                top: 4.0,
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: BoxConstraints(minWidth: 18.0),
+                    height: 18.0,
+                    padding: EdgeInsets.symmetric(horizontal: 5.0),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: theme.error,
+                      borderRadius: BorderRadius.circular(999.0),
+                      border: Border.all(color: theme.secondaryBackground, width: 1.5),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: theme.bodySmall.override(
+                        color: Colors.white,
+                        fontSize: 10.0,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

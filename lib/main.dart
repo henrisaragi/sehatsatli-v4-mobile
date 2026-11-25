@@ -8,6 +8,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import 'backend/firebase/firebase_config.dart';
 import '/core/network/api_client.dart';
+import '/core/network/push_service.dart';
 import '/core/storage/secure_storage.dart';
 import '/data/repositories/sync_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -22,6 +23,7 @@ void main() async {
   usePathUrlStrategy();
 
   await initFirebase();
+  await PushService.instance.init();
 
   await SQLiteManager.initialize();
   await FlutterFlowTheme.initialize();

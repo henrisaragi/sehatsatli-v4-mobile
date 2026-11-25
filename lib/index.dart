@@ -10,6 +10,8 @@ export '/pages/register_upt/register_upt_widget.dart' show RegisterUptWidget;
 export '/pages/registration_status/registration_status_widget.dart'
     show RegistrationStatusWidget;
 export '/pages/full_report/full_report_widget.dart' show FullReportWidget;
+export '/pages/notifications/notifications_widget.dart'
+    show NotificationsWidget;
 export '/pages/report_history/report_history_widget.dart'
     show ReportHistoryWidget;
 export '/pages/splash_auth/splash_auth_widget.dart' show SplashAuthWidget;
