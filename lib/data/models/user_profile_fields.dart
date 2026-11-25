@@ -67,6 +67,6 @@ class UserProfileFields {
     final value = _pick(['photo_url', 'avatar_url', 'photo', 'avatar', 'foto']);
     if (value == null) return null;
     if (value.startsWith('http://') || value.startsWith('https://')) return value;
-    return '${ApiEndpoints.baseUrl}$value';
+    return '${ApiEndpoints.hostUrl}$value';
   }
 }

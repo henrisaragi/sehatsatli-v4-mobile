@@ -6,7 +6,18 @@ Future<Database> initializeDatabase(String databaseName) async {
   final path = join(databasesPath, '$databaseName.db');
   return openDatabase(
     path,
-    version: 1,
+    version: 2,
+    onUpgrade: (db, oldVersion, newVersion) async {
+      if (oldVersion < 2) {
+        // v4.2.0 moved the `api/` segment into ApiEndpoints.baseUrl. Queued
+        // rows store the endpoint path, so strip the old prefix or they'd be
+        // sent to `.../api/api/...` and fail.
+        await db.execute(
+          "UPDATE sync_queue SET endpoint = substr(endpoint, 5) "
+          "WHERE endpoint LIKE 'api/%'",
+        );
+      }
+    },
     onCreate: (db, version) async {
       await db.execute('''
         CREATE TABLE local_reports (

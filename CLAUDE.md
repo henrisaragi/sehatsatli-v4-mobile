@@ -7,11 +7,14 @@
 
 # Workspace Project Folder
 
-### Backend project folder
+| Project                   | Path                                                    |
+| ------------------------- | ------------------------------------------------------- |
+| Backend API (Laravel, v4) | `/Users/henrisaragi/Herd/sehatsatli-v4`                 |
+| Frontend web (React)      | `/Users/henrisaragi/Development/sehatsatli-v2-frontend` |
 
-```
-
-```
+- **Production API base URL**: `https://sehatsatli.ksdae.kehutanan.go.id/api-v4/api/` (`ApiEndpoints.baseUrl`). Endpoint paths are relative to it and carry **no** `api/` prefix (e.g. `auth/login`).
+- Local backend (Herd): `http://sehatsatli-v4.test/api`
+- See the `project-paths` skill for when and how to check the backend and web code.
 
 ---
 

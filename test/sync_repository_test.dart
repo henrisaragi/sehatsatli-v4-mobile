@@ -101,7 +101,7 @@ void main() {
     );
     final queueId = await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/saveGeneralReportMobile',
+      endpoint: 'general-reports/saveGeneralReportMobile',
       payloadJson: jsonEncode({'client_id': clientId}),
     );
 
@@ -145,7 +145,7 @@ void main() {
       );
       await SQLiteManager.instance.enqueueSyncItem(
         clientId: clientId,
-        endpoint: 'api/general-reports/saveGeneralReportMobile',
+        endpoint: 'general-reports/saveGeneralReportMobile',
         payloadJson: jsonEncode({'client_id': clientId}),
       );
     }
@@ -181,7 +181,7 @@ void main() {
     );
     final queueId = await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/save',
+      endpoint: 'general-reports/save',
       payloadJson: jsonEncode({'client_id': clientId}),
     );
 
@@ -212,7 +212,7 @@ void main() {
     // queued, let alone synced, so server_id can't possibly be known.
     final queueId = await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/saveVerify',
+      endpoint: 'general-reports/saveVerify',
       payloadJson: jsonEncode({
         'verified_date': '2026-01-01',
         'client_id': clientId,
@@ -253,12 +253,12 @@ void main() {
     // Enqueued first (create), so FIFO drains it before the dependent item.
     await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/save',
+      endpoint: 'general-reports/save',
       payloadJson: jsonEncode({'client_id': clientId, 'report_date': '2026-01-01'}),
     );
     await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/saveVerify',
+      endpoint: 'general-reports/saveVerify',
       payloadJson: jsonEncode({
         'verified_date': '2026-01-01',
         'client_id': clientId,
@@ -319,7 +319,7 @@ void main() {
     );
     await SQLiteManager.instance.enqueueSyncItem(
       clientId: clientId,
-      endpoint: 'api/general-reports/saveVerify',
+      endpoint: 'general-reports/saveVerify',
       payloadJson: jsonEncode({
         'verified_date': '2026-01-01',
         'client_id': clientId,

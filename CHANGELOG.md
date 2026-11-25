@@ -10,8 +10,12 @@ section — this file is a shorter technical summary per version.
 
 ### Changed
 - **Backend v4 migration.** `ApiEndpoints.baseUrl` now points to
-  `https://sehatsatli.ksdae.kehutanan.go.id/api-v4/` (was `https://apisatli.biodiversity.id/`).
-  Breaking: this build only works against backend v4.
+  `https://sehatsatli.ksdae.kehutanan.go.id/api-v4/api/` (was `https://apisatli.biodiversity.id/`).
+  The `api/` segment now lives in the base URL, so endpoint constants carry no `api/` prefix.
+  `ApiEndpoints.hostUrl` (without `api/`) serves relative user-photo paths. Breaking: this build
+  only works against backend v4.
+- **SQLite schema v1 → v2.** The upgrade strips the old `api/` prefix from queued `sync_queue`
+  endpoints, so offline reports queued before the update don't get sent to `.../api/api/...`.
 - **2-step OTP login** (`docs-new-versions/login.md`). The 1-step `api/auth/login-app` is removed
   and replaced by `api/auth/login` (email + password → `login_token`) followed by
   `api/auth/otp/verify` (`login_token` + 6-digit OTP → `access_token`). The user profile now comes
