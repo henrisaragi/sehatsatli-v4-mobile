@@ -62,7 +62,9 @@ class ApiClient {
 
   final http.Client _client;
 
-  static const Duration _timeout = Duration(seconds: 15);
+  // Generous on purpose: field connections are slow, and production's
+  // `auth/login` only answers after sending the OTP email (~15s+ measured).
+  static const Duration _timeout = Duration(seconds: 30);
 
   /// Set once from main.dart. Invoked whenever an authenticated request comes
   /// back with HTTP 401, so the app can clear the session and go to login.
@@ -75,6 +77,7 @@ class ApiClient {
     Map<String, dynamic>? query,
     String? token,
     Duration? timeout,
+    bool reportUnauthorized = true,
   }) async {
     var uri = Uri.parse('${ApiEndpoints.baseUrl}$path');
     if (query != null && query.isNotEmpty) {
@@ -86,7 +89,7 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
 
     final response = await _send(request, timeout ?? _timeout, path);
-    return _toApiResponse(response, hadToken: token != null);
+    return _toApiResponse(response, hadToken: token != null && reportUnauthorized);
   }
 
   Future<Map<String, dynamic>> post(

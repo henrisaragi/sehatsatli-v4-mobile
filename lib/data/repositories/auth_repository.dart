@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../../core/constants/api_endpoints.dart';
@@ -204,20 +205,27 @@ class AuthRepository {
   Future<void> updatePersistedUser(Map<String, dynamic> user) =>
       _secureStorage.saveUserJson(jsonEncode(user));
 
-  /// Revokes the token server-side (`POST auth/logout`) and always clears
-  /// the local session, even offline. Never touches `local_reports` or
+  /// Clears the persisted session right away, then revokes the token on the
+  /// server in the background (`POST auth/logout`), so logout is instant even
+  /// offline or on a slow server. Never touches `local_reports` or
   /// `sync_queue` — unsynced field data survives a logout (CLAUDE.md §10.5).
   Future<void> logout() async {
     final token = await _secureStorage.readToken();
-    if (token != null) {
-      try {
-        await _apiClient.request('POST', ApiEndpoints.authLogout, token: token);
-      } on ApiNetworkException {
-        // Best-effort — still clear the local session below.
-      }
-    }
     await _secureStorage.deleteToken();
     await _secureStorage.deleteUserJson();
+    if (token != null) unawaited(_revokeToken(token));
+  }
+
+  Future<void> _revokeToken(String token) async {
+    try {
+      // A 401 here only means the old token is already dead — it must not
+      // trigger the global session handler, which could log out a session
+      // started meanwhile.
+      await _apiClient.request('POST', ApiEndpoints.authLogout,
+          token: token, reportUnauthorized: false, timeout: const Duration(seconds: 10));
+    } catch (_) {
+      // Best-effort; the local session is already gone.
+    }
   }
 
   /// Step 1 of the guest reset flow (docs-new-versions/forgot-password.md) —

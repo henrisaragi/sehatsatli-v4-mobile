@@ -32,9 +32,9 @@ void main() async {
   // Any API response with HTTP 401 clears the session and bounces to login,
   // even if the request happened on a page other than the login screen.
   ApiClient.onUnauthorized = () {
-    FFAppState().accessToken = null;
-    FFAppState().currentUser = null;
+    FFAppState().clearSession();
     SecureStorage().deleteToken();
+    SecureStorage().deleteUserJson();
     final context = appNavigatorKey.currentContext;
     if (context != null) {
       context.goNamed(SplashAuthWidget.routeName);

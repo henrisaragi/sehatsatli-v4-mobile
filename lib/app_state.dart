@@ -54,6 +54,13 @@ class FFAppState extends ChangeNotifier {
     _accessToken = value;
   }
 
+  /// Forgets the logged-in user in memory (persisted copies are cleared by
+  /// `AuthRepository.logout()`).
+  void clearSession() {
+    _accessToken = null;
+    _currentUser = null;
+  }
+
   dynamic _currentUser;
   dynamic get currentUser => _currentUser;
   set currentUser(dynamic value) {

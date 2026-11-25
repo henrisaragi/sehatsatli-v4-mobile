@@ -64,8 +64,7 @@ class _RegistrationStatusWidgetState extends State<RegistrationStatusWidget> {
 
   Future<void> _logout() async {
     await AuthRepository().logout();
-    FFAppState().accessToken = null;
-    FFAppState().currentUser = null;
+    FFAppState().clearSession();
     if (!mounted) return;
     context.goNamed(SplashAuthWidget.routeName);
   }

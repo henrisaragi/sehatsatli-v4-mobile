@@ -636,8 +636,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                             highlightColor: Colors.transparent,
                                             onTap: () async {
                                               await AuthRepository().logout();
-                                              FFAppState().accessToken = null;
-                                              FFAppState().currentUser = null;
+                                              FFAppState().clearSession();
                                               if (!mounted) return;
                                               context.goNamed(
                                                   SplashAuthWidget.routeName);
