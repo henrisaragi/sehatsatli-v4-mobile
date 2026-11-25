@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '/components/nav_item/nav_item_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 
 /// The 4 tabs — Beranda/Laporan/Sinkron/Profil. "Buat Laporan" is a
-/// separate flow reached via the FAB, not a tab.
+/// separate flow (pushed), shown as the middle button, not a tab.
 enum MainTab { beranda, laporan, sinkron, profil }
 
+/// Floating pill bottom bar (Instagram-style): icons only, the active tab
+/// sits on a soft pill.
 class MainBottomNavWidget extends StatelessWidget {
   const MainBottomNavWidget({super.key, required this.currentTab});
 
@@ -35,99 +36,103 @@ class MainBottomNavWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
-        border: Border(
-            top: BorderSide(color: FlutterFlowTheme.of(context).alternate)),
+    final theme = FlutterFlowTheme.of(context);
+
+    Widget tab(MainTab tab, IconData icon, String label) => _NavButton(
+          icon: icon,
+          label: label,
+          selected: currentTab == tab,
+          onTap: () => _goTo(context, tab),
+        );
+
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 4.0),
+        child: Container(
+          height: 64.0,
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          decoration: BoxDecoration(
+            color: theme.primaryBackground,
+            borderRadius: BorderRadius.circular(999.0),
+            border: Border.all(color: theme.alternate),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(20),
+                blurRadius: 16.0,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              tab(MainTab.beranda, LucideIcons.house, 'Beranda'),
+              tab(MainTab.laporan, LucideIcons.listChecks, 'Laporan'),
+              _NavButton(
+                icon: LucideIcons.squarePlus,
+                label: 'Buat Laporan',
+                selected: false,
+                color: theme.secondary,
+                onTap: () => context.pushNamed(QuickReportWidget.routeName),
+              ),
+              tab(MainTab.sinkron, LucideIcons.refreshCw, 'Sinkron'),
+              tab(MainTab.profil, LucideIcons.circleUserRound, 'Profil'),
+            ],
+          ),
+        ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Stack(
-          alignment: Alignment.topCenter,
-          clipBehavior: Clip.none,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                NavItemWidget(
-                  label: 'Beranda',
-                  icon: Icon(
-                    LucideIcons.house,
-                    color: currentTab == MainTab.beranda
-                        ? FlutterFlowTheme.of(context).primary
-                        : FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                  selected: currentTab == MainTab.beranda,
-                  onTap: () => _goTo(context, MainTab.beranda),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const StadiumBorder(),
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                width: 60.0,
+                height: 46.0,
+                decoration: BoxDecoration(
+                  color: selected ? theme.accent1 : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999.0),
                 ),
-                NavItemWidget(
-                  label: 'Laporan',
-                  icon: Icon(
-                    LucideIcons.listChecks,
-                    color: currentTab == MainTab.laporan
-                        ? FlutterFlowTheme.of(context).primary
-                        : FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                  selected: currentTab == MainTab.laporan,
-                  onTap: () => _goTo(context, MainTab.laporan),
-                ),
-                // Spacer for the FAB notch.
-                SizedBox(width: 64.0),
-                NavItemWidget(
-                  label: 'Sinkron',
-                  icon: Icon(
-                    LucideIcons.refreshCw,
-                    color: currentTab == MainTab.sinkron
-                        ? FlutterFlowTheme.of(context).primary
-                        : FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                  selected: currentTab == MainTab.sinkron,
-                  onTap: () => _goTo(context, MainTab.sinkron),
-                ),
-                NavItemWidget(
-                  label: 'Profil',
-                  icon: Icon(
-                    LucideIcons.user,
-                    color: currentTab == MainTab.profil
-                        ? FlutterFlowTheme.of(context).primary
-                        : FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                  selected: currentTab == MainTab.profil,
-                  onTap: () => _goTo(context, MainTab.profil),
-                ),
-              ],
-            ),
-            Positioned(
-              top: -24.0,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(9999.0),
-                onTap: () =>
-                    context.pushNamed(QuickReportWidget.routeName),
-                child: Container(
-                  width: 56.0,
-                  height: 56.0,
-                  decoration: BoxDecoration(
-                    color: FlutterFlowTheme.of(context).secondary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(51),
-                        blurRadius: 8.0,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    LucideIcons.plus,
-                    color: FlutterFlowTheme.of(context).onSecondary,
-                    size: 28.0,
-                  ),
+                child: Icon(
+                  icon,
+                  size: 26.0,
+                  color: color ??
+                      (selected ? theme.primary : theme.primaryText),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

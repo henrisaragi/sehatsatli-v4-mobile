@@ -39,6 +39,7 @@ abstract class ApiEndpoints {
   static const String laporanPlaceholder = '{laporan}';
   static const String laporan = 'laporan';
   static const String laporanSaya = 'laporan/saya';
+  static const String laporanEntitas = 'laporan/entitas';
   static String laporanDetail(String id) => 'laporan/$id';
   static const String laporanInvestigasi = 'laporan/{laporan}/investigasi';
   static const String laporanVerifikasiDokter = 'laporan/{laporan}/verifikasi-dokter';

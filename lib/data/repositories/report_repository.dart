@@ -19,6 +19,9 @@ class ReportSubmitResult {
   final String? message;
 }
 
+/// Which server report list to fetch.
+enum ReportListScope { mine, entitas }
+
 class ReportListResult {
   ReportListResult({required this.reports, required this.hasMore, this.errorMessage});
 
@@ -150,16 +153,20 @@ class ReportRepository {
     return clientId;
   }
 
-  /// `GET laporan` (all) or `GET laporan/saya` (mine), 25 per page. Network
+  /// `GET laporan/saya` (mine) or `GET laporan/entitas` (everyone in the
+  /// user's entitas), 25 per page. Network
   /// failures propagate as [ApiNetworkException].
   Future<ReportListResult> fetchReports({
     required int page,
     required String token,
-    bool mine = false,
+    required ReportListScope scope,
   }) async {
     final response = await _apiClient.request(
       'GET',
-      mine ? ApiEndpoints.laporanSaya : ApiEndpoints.laporan,
+      switch (scope) {
+        ReportListScope.mine => ApiEndpoints.laporanSaya,
+        ReportListScope.entitas => ApiEndpoints.laporanEntitas,
+      },
       query: {'page': page, 'per_page': 25},
       token: token,
     );

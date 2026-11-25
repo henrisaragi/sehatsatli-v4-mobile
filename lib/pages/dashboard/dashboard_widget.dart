@@ -74,7 +74,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         final result = await ReportRepository().fetchReports(
           page: 1,
           token: token,
-          mine: true,
+          scope: ReportListScope.mine,
         );
         _serverReports = result.reports;
       } on ApiNetworkException {

@@ -38,6 +38,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
 
   List<GetAllLocalReportsRow> _localReports = [];
   final List<Map<String, dynamic>> _serverReports = [];
+  bool _showUnsent = false;
   int _page = 1;
   bool _hasMore = true;
   bool _isLoadingFirstPage = true;
@@ -61,7 +62,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   }
 
   void _onScroll() {
-    if (!_hasMore || _isLoadingMore) return;
+    if (_showUnsent || !_hasMore || _isLoadingMore) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       _loadNextPage();
@@ -71,16 +72,12 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   Future<void> _loadLocalReports() async {
     if (kIsWeb) return;
     try {
-      // Load every local row, including already-`synced` ones — this table
-      // is the only offline-first fallback source we have (there's no
-      // separate read-through cache of server-fetched reports), so when the
-      // server fetch below fails we still need previously-synced reports to
-      // show up instead of an empty list. Duplicates against a successful
-      // server fetch are filtered out in `_combinedItems` instead of here.
       final rows = await SQLiteManager.instance.getAllLocalReports();
       if (!mounted) return;
       setState(() {
-        _localReports = rows;
+        // Only reports that haven't reached the server; once synced they
+        // show up in the server list instead.
+        _localReports = rows.where((r) => r.syncStatus != 'synced').toList();
       });
     } catch (_) {
       // sqflite unavailable (e.g. web) — local drafts just won't show.
@@ -117,18 +114,15 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
       final result = await ReportRepository().fetchReports(
         page: page,
         token: token,
-        mine: FFAppState().historyFilter == _filterMine,
+        scope: ReportListScope.entitas,
       );
       if (!mounted) return;
       setState(() {
         if (result.errorMessage != null) {
-          // Deliberately not surfacing the raw backend message here (e.g. a
-          // generic Laravel "Server Error" string) — it reads like the app
-          // itself is broken. The local fallback in `_combinedItems` below
-          // still renders whatever's cached; this is only seen when that's
-          // also empty.
-          _errorMessage =
-              'Tidak bisa memuat laporan dari server. Menampilkan data lokal yang tersimpan.';
+          // Deliberately not surfacing the raw backend message (e.g. a
+          // generic Laravel "Server Error") — it reads like the app is broken.
+          _errorMessage = 'Tidak bisa memuat laporan dari server.';
+          _hasMore = false;
         } else {
           _serverReports.addAll(result.reports);
           _hasMore = result.hasMore;
@@ -137,8 +131,11 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
       });
     } on ApiNetworkException {
       if (mounted) {
-        setState(() => _errorMessage =
-            'Tidak bisa memuat data online — menampilkan draf lokal saja.');
+        setState(() {
+          _errorMessage =
+              'Tidak bisa memuat laporan — periksa koneksi internet.';
+          _hasMore = false;
+        });
       }
     }
   }
@@ -146,58 +143,68 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   Future<void> _onRefresh() async {
     final token = FFAppState().accessToken;
     if (token != null) {
-      // Satisfies the remaining Fase 2 "manual pull-to-refresh" item —
-      // refreshes the cached master/location data alongside the report list.
+      // Refreshes the cached master data alongside the report list.
       unawaited(MasterRepository().refreshAll(token: token, force: true));
     }
     await _loadFirstPage();
   }
 
-  static const _filterAll = 'Semua';
-  static const _filterMine = 'Laporan Saya';
-  static const _filterUnsent = 'Belum Terkirim';
-
-  List<ReportListItem> get _combinedItems {
+  List<ReportListItem> get _visibleItems {
     final query = FFAppState().historySearchQuery.trim().toLowerCase();
-    final filter = FFAppState().historyFilter;
-    final items = filter == _filterUnsent
-        ? _localReports
-            .where((r) => r.syncStatus != 'synced')
-            .map(ReportListItem.local)
-            .toList()
-        : ReportListItem.merge(_localReports, _serverReports);
+    final items = _showUnsent
+        ? _localReports.map(ReportListItem.local)
+        : _serverReports.map(ReportListItem.server);
     return items
-        .where((item) => query.isEmpty || item.species.toLowerCase().contains(query))
+        .where((item) =>
+            query.isEmpty || item.species.toLowerCase().contains(query))
         .toList();
   }
 
-  void _selectFilter(String label) {
-    setState(() => FFAppState().historyFilter = label);
-    _loadFirstPage();
-  }
-
-  Widget _filterChip(String label) {
-    final active = FFAppState().historyFilter == label;
-    return InkWell(
-      onTap: () => _selectFilter(label),
-      borderRadius: BorderRadius.circular(999.0),
-      child: Container(
-        padding: EdgeInsetsDirectional.fromSTEB(16.0, 8.0, 16.0, 8.0),
-        decoration: BoxDecoration(
-          color: active
-              ? FlutterFlowTheme.of(context).primary
-              : FlutterFlowTheme.of(context).secondaryBackground,
-          borderRadius: BorderRadius.circular(999.0),
-          border: Border.all(color: FlutterFlowTheme.of(context).alternate),
-        ),
-        child: Text(
-          label,
-          style: FlutterFlowTheme.of(context).labelMedium.override(
-                color: active
-                    ? FlutterFlowTheme.of(context).onPrimary
-                    : FlutterFlowTheme.of(context).primaryText,
-                fontWeight: FontWeight.w600,
+  Widget _tab(String label, bool unsentTab, {int? count}) {
+    final theme = FlutterFlowTheme.of(context);
+    final active = _showUnsent == unsentTab;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _showUnsent = unsentTab),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 12.0),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: active ? theme.primary : Colors.transparent,
+                width: 2.0,
               ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: theme.labelLarge.override(
+                  color: active ? theme.primary : theme.secondaryText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (count != null && count > 0) ...[
+                SizedBox(width: 6.0),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 7.0, vertical: 1.0),
+                  decoration: BoxDecoration(
+                    color: theme.secondary,
+                    borderRadius: BorderRadius.circular(999.0),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: theme.labelSmall.override(
+                      color: theme.onSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -205,7 +212,8 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _combinedItems;
+    final items = _visibleItems;
+    final showLoadMore = !_showUnsent && _hasMore;
 
     return GestureDetector(
       onTap: () {
@@ -220,16 +228,11 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              decoration: BoxDecoration(
-                color: FlutterFlowTheme.of(context).secondaryBackground,
-                border: Border(
-                    bottom: BorderSide(
-                        color: FlutterFlowTheme.of(context).alternate)),
-              ),
+              color: FlutterFlowTheme.of(context).secondaryBackground,
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 12.0, 20.0, 12.0),
+                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 12.0, 20.0, 4.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -263,27 +266,28 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                           setState(() => FFAppState().historySearchQuery = v),
                       variant: 'outlined',
                     ),
-                    SizedBox(height: 12.0),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _filterChip(_filterAll),
-                          SizedBox(width: 8.0),
-                          _filterChip(_filterMine),
-                          SizedBox(width: 8.0),
-                          _filterChip(_filterUnsent),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
                 ),
               ),
             ),
+            Container(
+              decoration: BoxDecoration(
+                color: FlutterFlowTheme.of(context).secondaryBackground,
+                border: Border(
+                    bottom: BorderSide(
+                        color: FlutterFlowTheme.of(context).alternate)),
+              ),
+              child: Row(
+                children: [
+                  _tab('Laporan', false),
+                  _tab('Belum Terkirim', true, count: _localReports.length),
+                ],
+              ),
+            ),
             TrainingModeBanner(),
             Expanded(
-              child: _isLoadingFirstPage
+              child: _isLoadingFirstPage && !_showUnsent
                   ? Center(child: CircularProgressIndicator())
                   : RefreshIndicator(
                       onRefresh: _onRefresh,
@@ -298,7 +302,9 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                 SizedBox(height: 12.0),
                                 Center(
                                   child: Text(
-                                    _errorMessage ?? 'Belum ada laporan',
+                                    _showUnsent
+                                        ? 'Semua laporan sudah terkirim'
+                                        : (_errorMessage ?? 'Belum ada laporan'),
                                     textAlign: TextAlign.center,
                                     style: FlutterFlowTheme.of(context)
                                         .bodyMedium
@@ -312,7 +318,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                           : ListView.separated(
                               controller: _scrollController,
                               padding: EdgeInsets.all(20.0),
-                              itemCount: items.length + (_hasMore ? 1 : 0),
+                              itemCount: items.length + (showLoadMore ? 1 : 0),
                               separatorBuilder: (_, __) =>
                                   SizedBox(height: 12.0),
                               itemBuilder: (context, index) {
