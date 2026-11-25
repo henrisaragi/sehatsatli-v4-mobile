@@ -1,7 +1,21 @@
 abstract class ApiEndpoints {
-  static const String baseUrl = 'https://apisatli.biodiversity.id/';
+  static const String baseUrl = 'https://sehatsatli.ksdae.kehutanan.go.id/api-v4/';
 
-  static const String loginApp = 'api/auth/login-app';
+  // Backend v4 — 2-step OTP login (docs-new-versions/login.md). Replaces the
+  // old 1-step md5-hash `login-app` endpoint, which no longer exists on this
+  // host.
+  static const String authLogin = 'api/auth/login';
+  static const String authOtpVerify = 'api/auth/otp/verify';
+  static const String userMe = 'api/user';
+
+  // Backend v4 — self-service UPT staff registration
+  // (docs-new-versions/register-upt.md).
+  static const String registrasiStatus = 'api/registrasi/status';
+  static const String uptGetAll = 'api/upt';
+  static const String registrasiUpt = 'api/registrasi/upt';
+  static String uptUnitOrganisasi(String uptId) =>
+      'api/upt/$uptId/unit-organisasi';
+
   static const String logout = 'api/auth/logout';
   // Named "forgot-password" server-side, but per API_ENDPOINTS.md §1 this is
   // actually "change password while logged in" (body: { password }), not a

@@ -44,6 +44,9 @@ Set<String> get _kPublicRoutePaths => {
       SplashAuthWidget.routePath,
       CommunityReportWidget.routePath,
       ForgotPasswordWidget.routePath,
+      // Pre-auth steps of the v4 login/registration flow (no token yet).
+      OtpLoginWidget.routePath,
+      RegisterUptWidget.routePath,
     };
 
 GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
@@ -91,6 +94,25 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: ForgotPasswordWidget.routeName,
           path: ForgotPasswordWidget.routePath,
           builder: (context, params) => ForgotPasswordWidget(),
+        ),
+        FFRoute(
+          name: OtpLoginWidget.routeName,
+          path: OtpLoginWidget.routePath,
+          builder: (context, params) => OtpLoginWidget(
+            email: params.getParam('email', ParamType.String) ?? '',
+            loginToken: params.getParam('loginToken', ParamType.String) ?? '',
+            expiresIn: params.getParam('expiresIn', ParamType.int),
+          ),
+        ),
+        FFRoute(
+          name: RegisterUptWidget.routeName,
+          path: RegisterUptWidget.routePath,
+          builder: (context, params) => RegisterUptWidget(),
+        ),
+        FFRoute(
+          name: RegistrationStatusWidget.routeName,
+          path: RegistrationStatusWidget.routePath,
+          builder: (context, params) => RegistrationStatusWidget(),
         ),
         FFRoute(
           name: CommunityReportListWidget.routeName,

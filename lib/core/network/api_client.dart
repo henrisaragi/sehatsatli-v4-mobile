@@ -18,6 +18,21 @@ class ApiNetworkException implements Exception {
   String toString() => 'ApiNetworkException: $message';
 }
 
+/// Thrown when the server responds 429 (rate limited) — e.g. the `auth:api`
+/// group's 6 requests/minute throttle (see docs-new-versions/login.md).
+/// Body content alone can't distinguish this from a 401/422, since a
+/// throttled response has the same bare `{"message": "..."}` shape, so it's
+/// surfaced as its own exception rather than folded into the normal
+/// success/failure response handling.
+class ApiRateLimitException implements Exception {
+  ApiRateLimitException([this.message]);
+
+  final String? message;
+
+  @override
+  String toString() => 'ApiRateLimitException: $message';
+}
+
 class ApiClient {
   ApiClient({http.Client? client}) : _client = client ?? http.Client();
 
@@ -50,7 +65,7 @@ class ApiClient {
       throw ApiNetworkException('Network error: ${e.message}');
     }
 
-    return _handleResponse(response);
+    return _handleResponse(response, hadToken: token != null);
   }
 
   Future<Map<String, dynamic>> get(
@@ -73,7 +88,7 @@ class ApiClient {
       throw ApiNetworkException('Network error: ${e.message}');
     }
 
-    return _handleResponse(response);
+    return _handleResponse(response, hadToken: token != null);
   }
 
   Map<String, String> _headers(String? token) => {
@@ -82,8 +97,19 @@ class ApiClient {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
-  Map<String, dynamic> _handleResponse(http.Response response) {
-    if (response.statusCode == 401) {
+  Map<String, dynamic> _handleResponse(
+    http.Response response, {
+    required bool hadToken,
+  }) {
+    if (response.statusCode == 429) {
+      throw ApiRateLimitException();
+    }
+
+    // A 401 on a token-less request (e.g. wrong email/password on the login
+    // endpoint) is a normal, expected failure the caller handles inline —
+    // not an expired session. Only a 401 on an authenticated request means
+    // the session itself was rejected.
+    if (response.statusCode == 401 && hadToken) {
       onUnauthorized?.call();
     }
 

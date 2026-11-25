@@ -26,6 +26,71 @@ class OtpResult {
   final String? message;
 }
 
+/// Step 1 of the v4 login flow (docs-new-versions/login.md) — result of
+/// `POST /api/auth/login`. Success carries a short-lived `login_token` (not
+/// an access token) to be exchanged for one in step 2.
+class LoginOtpRequestResult {
+  LoginOtpRequestResult({
+    required this.success,
+    this.loginToken,
+    this.expiresIn,
+    this.message,
+  });
+
+  final bool success;
+  final String? loginToken;
+  final int? expiresIn;
+  final String? message;
+}
+
+/// Step 2 — result of `POST /api/auth/otp/verify`.
+class LoginOtpVerifyResult {
+  LoginOtpVerifyResult({
+    required this.success,
+    this.accessToken,
+    this.message,
+    this.attemptsRemaining,
+    this.tokenInvalid = false,
+  });
+
+  final bool success;
+  final String? accessToken;
+  final String? message;
+
+  /// Present only for the "wrong OTP, try again" case.
+  final int? attemptsRemaining;
+
+  /// True when the `login_token` itself is dead (expired or max attempts
+  /// reached) — there's no resend, caller must restart from step 1.
+  final bool tokenInvalid;
+}
+
+/// Result of `GET /api/registrasi/status` — used right after login to route
+/// the user (docs-new-versions/login.md + register-upt.md).
+class RegistrationStatusResult {
+  RegistrationStatusResult({
+    required this.exists,
+    this.statusVerifikasi,
+    this.alasanPenolakan,
+    this.upt,
+    this.unitOrganisasi,
+    this.nip,
+    this.jabatan,
+  });
+
+  /// False when the user has never submitted a UPT registration (server
+  /// responds 404).
+  final bool exists;
+
+  /// 'menunggu' | 'ditolak' | 'terverifikasi'
+  final String? statusVerifikasi;
+  final String? alasanPenolakan;
+  final Map<String, dynamic>? upt;
+  final Map<String, dynamic>? unitOrganisasi;
+  final String? nip;
+  final String? jabatan;
+}
+
 class AuthRepository {
   AuthRepository({ApiClient? apiClient, SecureStorage? secureStorage})
       : _apiClient = apiClient ?? ApiClient(),
@@ -34,37 +99,88 @@ class AuthRepository {
   final ApiClient _apiClient;
   final SecureStorage _secureStorage;
 
-  Future<AuthResult> login(String email, String password) async {
+  /// Step 1 of the v4 login flow — emails an OTP and returns a short-lived
+  /// `login_token` to carry into [verifyLoginOtp]. Unlike the old envelope,
+  /// v4 success responses have no `success` field at all — they're bare
+  /// JSON — so success here is detected by the presence of `login_token`.
+  Future<LoginOtpRequestResult> requestLoginOtp(
+      String email, String password) async {
     final response = await _apiClient.post(
-      ApiEndpoints.loginApp,
-      body: {
-        'email': email,
-        'password': password,
-      },
+      ApiEndpoints.authLogin,
+      body: {'email': email, 'password': password},
     );
 
-    if (!isApiSuccess(response)) {
-      return AuthResult(success: false, message: extractApiMessage(response));
+    final loginToken = response['login_token'];
+    if (loginToken is String) {
+      final expiresIn = response['expires_in'];
+      return LoginOtpRequestResult(
+        success: true,
+        loginToken: loginToken,
+        expiresIn: expiresIn is int ? expiresIn : null,
+      );
+    }
+    return LoginOtpRequestResult(
+      success: false,
+      message: extractApiMessage(response) ?? 'Email atau password salah.',
+    );
+  }
+
+  /// Step 2 — exchanges the OTP + step-1 `login_token` for a real access
+  /// token. Persists it on success, same as the old single-step login did.
+  Future<LoginOtpVerifyResult> verifyLoginOtp(
+      String loginToken, String otp) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.authOtpVerify,
+      body: {'login_token': loginToken, 'otp': otp},
+    );
+
+    final accessToken = response['access_token'];
+    if (accessToken is String) {
+      await _secureStorage.saveToken(accessToken);
+      return LoginOtpVerifyResult(success: true, accessToken: accessToken);
     }
 
-    final data = response['data'] is Map<String, dynamic>
-        ? response['data'] as Map<String, dynamic>
-        : response;
+    final attemptsRemaining = response['attempts_remaining'];
+    return LoginOtpVerifyResult(
+      success: false,
+      message: extractApiMessage(response) ?? 'Gagal memverifikasi OTP.',
+      attemptsRemaining: attemptsRemaining is int ? attemptsRemaining : null,
+      tokenInvalid: attemptsRemaining is! int,
+    );
+  }
 
-    final token = data['access_token'] ?? response['access_token'] ?? data['token'];
-    final user = data['user'] ?? response['user'];
+  /// `GET /api/user` — the response body *is* the user object (no `data`
+  /// wrapper). Used right after OTP verification since step 2's response
+  /// carries only the token, not a user snapshot.
+  Future<Map<String, dynamic>?> fetchCurrentUser(String token) async {
+    final response = await _apiClient.get(ApiEndpoints.userMe, token: token);
+    if (response['id'] == null) return null;
+    await _secureStorage.saveUserJson(jsonEncode(response));
+    return response;
+  }
 
-    if (token is String) {
-      await _secureStorage.saveToken(token);
+  /// `GET /api/registrasi/status` — a 404 body (`{"message": "..."}`, no
+  /// `status_verifikasi`) means the user never registered as UPT staff.
+  Future<RegistrationStatusResult> fetchRegistrationStatus(
+      String token) async {
+    final response =
+        await _apiClient.get(ApiEndpoints.registrasiStatus, token: token);
+    final status = response['status_verifikasi'];
+    if (status is! String) {
+      return RegistrationStatusResult(exists: false);
     }
-    if (user is Map) {
-      await _secureStorage.saveUserJson(jsonEncode(user));
-    }
-
-    return AuthResult(
-      success: true,
-      token: token is String ? token : null,
-      user: user,
+    return RegistrationStatusResult(
+      exists: true,
+      statusVerifikasi: status,
+      alasanPenolakan: response['alasan_penolakan'] as String?,
+      upt: response['upt'] is Map
+          ? Map<String, dynamic>.from(response['upt'] as Map)
+          : null,
+      unitOrganisasi: response['unit_organisasi'] is Map
+          ? Map<String, dynamic>.from(response['unit_organisasi'] as Map)
+          : null,
+      nip: response['nip'] as String?,
+      jabatan: response['jabatan'] as String?,
     );
   }
 

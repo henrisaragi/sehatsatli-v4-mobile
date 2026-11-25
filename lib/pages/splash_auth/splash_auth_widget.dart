@@ -528,23 +528,26 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
 
                                       try {
                                         final result = await AuthRepository()
-                                            .login(email, password);
+                                            .requestLoginOtp(email, password);
                                         if (result.success) {
-                                          FFAppState().accessToken =
-                                              result.token;
-                                          FFAppState().currentUser =
-                                              result.user;
-                                          if (result.token != null) {
-                                            MasterRepository().refreshAll(
-                                                token: result.token!);
-                                          }
+                                          _model.isLoggingIn = false;
+                                          safeSetState(() {});
                                           if (!mounted) return;
-                                          context.goNamed(
-                                              DashboardWidget.routeName);
+                                          context.pushNamed(
+                                            OtpLoginWidget.routeName,
+                                            extra: {
+                                              'email': email,
+                                              'loginToken': result.loginToken,
+                                              'expiresIn': result.expiresIn,
+                                            },
+                                          );
                                           return;
                                         }
                                         _model.error = result.message ??
                                             'Login failed. Please check your credentials.';
+                                      } on ApiRateLimitException {
+                                        _model.error =
+                                            'Terlalu banyak percobaan, coba lagi nanti.';
                                       } on ApiNetworkException {
                                         _model.error =
                                             'Cannot reach the server. Check your internet connection.';
@@ -615,19 +618,27 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                                   lineHeight: 1.38,
                                                 ),
                                           ),
-                                          wrapWithModel(
-                                            model: _model.buttonModel3,
-                                            updateCallback: () =>
-                                                safeSetState(() {}),
-                                            child: ButtonWidget(
-                                              iconPresent: false,
-                                              iconEndPresent: false,
-                                              content: 'Register Officer',
-                                              variant: 'ghost',
-                                              size: 'small',
-                                              fullWidth: false,
-                                              loading: false,
-                                              disabled: false,
+                                          InkWell(
+                                            splashColor: Colors.transparent,
+                                            focusColor: Colors.transparent,
+                                            hoverColor: Colors.transparent,
+                                            highlightColor: Colors.transparent,
+                                            onTap: () => context.pushNamed(
+                                                RegisterUptWidget.routeName),
+                                            child: wrapWithModel(
+                                              model: _model.buttonModel3,
+                                              updateCallback: () =>
+                                                  safeSetState(() {}),
+                                              child: ButtonWidget(
+                                                iconPresent: false,
+                                                iconEndPresent: false,
+                                                content: 'Register Officer',
+                                                variant: 'ghost',
+                                                size: 'small',
+                                                fullWidth: false,
+                                                loading: false,
+                                                disabled: false,
+                                              ),
                                             ),
                                           ),
                                         ].divide(SizedBox(width: 4.0)),

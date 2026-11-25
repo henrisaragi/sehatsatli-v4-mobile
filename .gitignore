@@ -45,3 +45,6 @@ ios/Flutter/Flutter.podspec
 # Generated coverage
 coverage/
 docs/*
+
+# Claude Code
+.claude/

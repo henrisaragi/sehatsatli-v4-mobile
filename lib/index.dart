@@ -12,8 +12,12 @@ export '/pages/forgot_password/forgot_password_widget.dart'
 export '/pages/quick_report/quick_report_widget.dart' show QuickReportWidget;
 export '/pages/notification_inbox/notification_inbox_widget.dart'
     show NotificationInboxWidget;
+export '/pages/otp_login/otp_login_widget.dart' show OtpLoginWidget;
 export '/pages/privacy_policy/privacy_policy_widget.dart'
     show PrivacyPolicyWidget;
+export '/pages/register_upt/register_upt_widget.dart' show RegisterUptWidget;
+export '/pages/registration_status/registration_status_widget.dart'
+    show RegistrationStatusWidget;
 export '/pages/full_report/full_report_widget.dart' show FullReportWidget;
 export '/pages/report_history/report_history_widget.dart'
     show ReportHistoryWidget;
