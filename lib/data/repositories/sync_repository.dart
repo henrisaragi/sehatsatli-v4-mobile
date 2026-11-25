@@ -158,6 +158,11 @@ class SyncRepository {
       if (_tahapIndex(serverTahap) > _tahapIndex(localTahap)) {
         payload['tahap'] = serverTahap;
       }
+      // The stage the server has confirmed, shown on the detail page.
+      final confirmed = payload['tahap_server'] as String?;
+      if (confirmed == null || _tahapIndex(serverTahap) > _tahapIndex(confirmed)) {
+        payload['tahap_server'] = serverTahap;
+      }
     }
 
     final open = await SQLiteManager.instance.countOpenSyncItems(clientId);

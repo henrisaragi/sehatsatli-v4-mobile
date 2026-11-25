@@ -79,6 +79,7 @@ void main() {
     final row = await SQLiteManager.instance.getLocalReport('c-offline');
     expect(row!.syncStatus, 'pending');
     expect((await localPayload('c-offline'))['tahap'], 'verifikasi_dokter');
+    expect((await localPayload('c-offline'))['tahap_server'], isNull);
   });
 
   test('online: create resolves the server UUID used by the next stage', () async {
@@ -108,6 +109,7 @@ void main() {
     expect(row!.syncStatus, 'synced');
     expect(row.serverId, 'uuid-1');
     expect((await localPayload('c-online'))['tahap'], 'verifikasi_dokter');
+    expect((await localPayload('c-online'))['tahap_server'], 'verifikasi_dokter');
     expect(await SQLiteManager.instance.getPendingSyncQueue(), isEmpty);
   });
 
@@ -139,6 +141,7 @@ void main() {
     expect(first.status, ReportSubmitStatus.failed);
     expect(first.message, 'The selected spesies id is invalid.');
     expect(requests, ['POST /api-v4/api/laporan']); // investigasi never sent
+    expect((await localPayload('c-rejected'))['tahap_server'], isNull);
 
     rejectCreate = false;
     final retried = await repo.retry('c-rejected');

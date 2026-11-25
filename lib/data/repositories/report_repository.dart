@@ -135,6 +135,7 @@ class ReportRepository {
         final merged = row.syncStatus == 'synced'
             ? {...local, ...remote, 'foto_lokal': local['foto_lokal']}
             : {...remote, ...local};
+        merged['tahap_server'] = remote['tahap'];
         await SQLiteManager.instance.upsertLocalReport(
           clientId: row.clientId,
           payloadJson: jsonEncode(merged),
@@ -146,7 +147,7 @@ class ReportRepository {
     final clientId = remote['client_uuid']?.toString() ?? newClientId();
     await SQLiteManager.instance.upsertLocalReport(
       clientId: clientId,
-      payloadJson: jsonEncode(remote),
+      payloadJson: jsonEncode({...remote, 'tahap_server': remote['tahap']}),
       syncStatus: 'synced',
       serverId: serverId,
     );

@@ -59,7 +59,15 @@ class _FullReportWidgetState extends State<FullReportWidget> {
   final _VerifikasiFormData _verifikasi = _VerifikasiFormData();
   final _HasilLabFormData _hasilLab = _HasilLabFormData();
 
+  /// Next form to fill; advances as soon as a stage is queued (even offline).
   String get _tahap => _laporan['tahap'] as String? ?? 'investigasi';
+
+  /// Stage the server has confirmed — null until the laporan reaches it.
+  String? get _serverTahap {
+    if (_serverId == null) return null;
+    return _laporan['tahap_server'] as String? ??
+        (_syncStatus == 'synced' ? _tahap : null);
+  }
 
   @override
   void initState() {
@@ -281,10 +289,13 @@ class _FullReportWidgetState extends State<FullReportWidget> {
   }
 
   Widget _statusCard(FlutterFlowTheme theme) {
-    final stepIndex = tahapOrder.indexOf(_tahap);
+    final serverTahap = _serverTahap;
+    final stepIndex = serverTahap == null ? -1 : tahapOrder.indexOf(serverTahap);
     return _card(
       theme,
-      title: 'Tahap: ${tahapLabels[_tahap] ?? _tahap}',
+      title: serverTahap == null
+          ? 'Belum diterima server'
+          : 'Tahap: ${tahapLabels[serverTahap] ?? serverTahap}',
       children: [
         LinearProgressIndicator(
           value: (stepIndex + 1) / tahapOrder.length,
