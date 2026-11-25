@@ -12,9 +12,17 @@ enum MainTab { beranda, laporan, sinkron, profil }
 /// Floating pill bottom bar (Instagram-style): icons only, the active tab
 /// sits on a soft pill.
 class MainBottomNavWidget extends StatelessWidget {
-  const MainBottomNavWidget({super.key, required this.currentTab});
+  const MainBottomNavWidget({
+    super.key,
+    required this.currentTab,
+    this.onQuickReportClosed,
+  });
 
   final MainTab currentTab;
+
+  /// Called when the user comes back from "Buat Laporan", so the page can
+  /// reload what it lists.
+  final VoidCallback? onQuickReportClosed;
 
   void _goTo(BuildContext context, MainTab tab) {
     if (tab == currentTab) return;
@@ -74,7 +82,10 @@ class MainBottomNavWidget extends StatelessWidget {
                 label: 'Buat Laporan',
                 selected: false,
                 color: theme.secondary,
-                onTap: () => context.pushNamed(QuickReportWidget.routeName),
+                onTap: () async {
+                  await context.pushNamed(QuickReportWidget.routeName);
+                  onQuickReportClosed?.call();
+                },
               ),
               tab(MainTab.sinkron, LucideIcons.refreshCw, 'Sinkron'),
               tab(MainTab.profil, LucideIcons.circleUserRound, 'Profil'),
@@ -127,8 +138,8 @@ class _NavButton extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 26.0,
-                  color: color ??
-                      (selected ? theme.primary : theme.primaryText),
+                  color:
+                      color ?? (selected ? theme.primary : theme.primaryText),
                 ),
               ),
             ),

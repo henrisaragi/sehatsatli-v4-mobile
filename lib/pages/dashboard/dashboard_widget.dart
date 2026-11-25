@@ -209,7 +209,10 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             ),
           ],
         ),
-        bottomNavigationBar: MainBottomNavWidget(currentTab: MainTab.beranda),
+        bottomNavigationBar: MainBottomNavWidget(
+          currentTab: MainTab.beranda,
+          onQuickReportClosed: _load,
+        ),
       ),
     );
   }

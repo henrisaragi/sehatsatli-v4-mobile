@@ -204,8 +204,8 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
           Icon(LucideIcons.trash2, color: Colors.white, size: 22.0),
           SizedBox(height: 4.0),
           Text('Hapus',
-              style: theme.labelSmall.override(
-                  color: Colors.white, fontWeight: FontWeight.w600)),
+              style: theme.labelSmall
+                  .override(color: Colors.white, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -283,7 +283,8 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 12.0, 20.0, 4.0),
+                  padding:
+                      EdgeInsetsDirectional.fromSTEB(20.0, 12.0, 20.0, 4.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -292,33 +293,34 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                         children: [
                           Text(
                             'Laporan Kasus',
-                          style: FlutterFlowTheme.of(context)
-                              .headlineSmall
-                              .override(
-                                font: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.bold),
-                                color: FlutterFlowTheme.of(context).primaryText,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12.0),
-                    TextFieldWidget(
-                      label: '',
-                      labelPresent: false,
-                      hint: 'Cari spesies...',
-                      leadingIcon: Icon(LucideIcons.search,
-                          color: FlutterFlowTheme.of(context).primaryText,
-                          size: 20.0),
-                      leadingIconPresent: true,
-                      value: FFAppState().historySearchQuery,
-                      onChanged: (v) =>
-                          setState(() => FFAppState().historySearchQuery = v),
-                      variant: 'outlined',
-                    ),
-                  ],
-                ),
+                            style: FlutterFlowTheme.of(context)
+                                .headlineSmall
+                                .override(
+                                  font: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold),
+                                  color:
+                                      FlutterFlowTheme.of(context).primaryText,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 12.0),
+                      TextFieldWidget(
+                        label: '',
+                        labelPresent: false,
+                        hint: 'Cari spesies...',
+                        leadingIcon: Icon(LucideIcons.search,
+                            color: FlutterFlowTheme.of(context).primaryText,
+                            size: 20.0),
+                        leadingIconPresent: true,
+                        value: FFAppState().historySearchQuery,
+                        onChanged: (v) =>
+                            setState(() => FFAppState().historySearchQuery = v),
+                        variant: 'outlined',
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -344,6 +346,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                       onRefresh: _onRefresh,
                       child: items.isEmpty
                           ? ListView(
+                              physics: AlwaysScrollableScrollPhysics(),
                               children: [
                                 SizedBox(height: 96.0),
                                 Icon(LucideIcons.package,
@@ -355,7 +358,8 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                   child: Text(
                                     _showUnsent
                                         ? 'Semua laporan sudah terkirim'
-                                        : (_errorMessage ?? 'Belum ada laporan'),
+                                        : (_errorMessage ??
+                                            'Belum ada laporan'),
                                     textAlign: TextAlign.center,
                                     style: FlutterFlowTheme.of(context)
                                         .bodyMedium
@@ -368,6 +372,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                             )
                           : ListView.separated(
                               controller: _scrollController,
+                              physics: AlwaysScrollableScrollPhysics(),
                               padding: EdgeInsets.all(20.0),
                               itemCount: items.length + (showLoadMore ? 1 : 0),
                               separatorBuilder: (_, __) =>
@@ -395,17 +400,21 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                   syncStatus: item.syncStatus,
                                   date: item.date,
                                   reportCode: item.shortId,
-                                  onTap: () => context.pushNamed(
-                                    FullReportWidget.routeName,
-                                    queryParameters: {
-                                      if (item.clientId != null)
-                                        'clientId': serializeParam(
-                                            item.clientId, ParamType.String),
-                                      if (item.clientId == null)
-                                        'reportId': serializeParam(
-                                            item.serverId, ParamType.String),
-                                    }.withoutNulls,
-                                  ),
+                                  onTap: () async {
+                                    await context.pushNamed(
+                                      FullReportWidget.routeName,
+                                      queryParameters: {
+                                        if (item.clientId != null)
+                                          'clientId': serializeParam(
+                                              item.clientId, ParamType.String),
+                                        if (item.clientId == null)
+                                          'reportId': serializeParam(
+                                              item.serverId, ParamType.String),
+                                      }.withoutNulls,
+                                    );
+                                    // The detail page can send or delete it.
+                                    if (mounted) _loadFirstPage();
+                                  },
                                 );
                                 if (!item.isDeletable) return card;
                                 return Dismissible(
@@ -423,9 +432,11 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
             ),
           ],
         ),
-        bottomNavigationBar: MainBottomNavWidget(currentTab: MainTab.laporan),
+        bottomNavigationBar: MainBottomNavWidget(
+          currentTab: MainTab.laporan,
+          onQuickReportClosed: _loadFirstPage,
+        ),
       ),
     );
   }
 }
-
