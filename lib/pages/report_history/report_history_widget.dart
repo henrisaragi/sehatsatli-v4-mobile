@@ -160,6 +160,57 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
         .toList();
   }
 
+  Future<bool> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Hapus laporan dari perangkat?'),
+        content: Text(
+            'Laporan ini belum ada di server. Data yang dihapus tidak bisa dikembalikan.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('Hapus',
+                  style: TextStyle(color: FlutterFlowTheme.of(context).error))),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _deleteLocal(String clientId) async {
+    // Drop it from the list first so the dismissed row isn't rebuilt.
+    setState(() => _localReports.removeWhere((r) => r.clientId == clientId));
+    await ReportRepository().deleteLocal(clientId);
+    if (!mounted) return;
+    showSnackbar(context, 'Laporan dihapus dari perangkat.');
+  }
+
+  Widget _deleteBackground() {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      alignment: Alignment.centerRight,
+      padding: EdgeInsets.only(right: 24.0),
+      decoration: BoxDecoration(
+        color: theme.error,
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.trash2, color: Colors.white, size: 22.0),
+          SizedBox(height: 4.0),
+          Text('Hapus',
+              style: theme.labelSmall.override(
+                  color: Colors.white, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
   Widget _tab(String label, bool unsentTab, {int? count}) {
     final theme = FlutterFlowTheme.of(context);
     final active = _showUnsent == unsentTab;
@@ -334,13 +385,14 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                   );
                                 }
                                 final item = items[index];
-                                return ReportCardWidget(
+                                final card = ReportCardWidget(
                                   icon: Icon(LucideIcons.pawPrint,
                                       color:
                                           FlutterFlowTheme.of(context).primary,
-                                      size: 24.0),
+                                      size: 22.0),
                                   species: item.species,
                                   status: item.badge,
+                                  syncStatus: item.syncStatus,
                                   date: item.date,
                                   reportCode: item.shortId,
                                   onTap: () => context.pushNamed(
@@ -354,6 +406,16 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                             item.serverId, ParamType.String),
                                     }.withoutNulls,
                                   ),
+                                );
+                                if (!item.isDeletable) return card;
+                                return Dismissible(
+                                  key: ValueKey('local_${item.clientId}'),
+                                  direction: DismissDirection.endToStart,
+                                  confirmDismiss: (_) => _confirmDelete(),
+                                  onDismissed: (_) =>
+                                      _deleteLocal(item.clientId!),
+                                  background: _deleteBackground(),
+                                  child: card,
                                 );
                               },
                             ),

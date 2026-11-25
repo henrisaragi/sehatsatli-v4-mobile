@@ -53,6 +53,10 @@ class ReportListItem {
 
   bool get isUnsent => syncStatus != 'synced';
 
+  /// Only reports that never reached the server can be deleted (on-device);
+  /// backend v4 has no delete endpoint.
+  bool get isDeletable => clientId != null && serverId == null;
+
   /// Short server id for display, e.g. `#01a0497a`.
   String get shortId {
     final id = serverId;
@@ -107,6 +111,8 @@ class ReportListItem {
 
   static String _formatDate(String raw) {
     final parsed = DateTime.tryParse(raw);
-    return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed.toLocal()) : raw;
+    return parsed != null
+        ? dateTimeFormat('dd MMMM yyyy', parsed.toLocal(), locale: 'id')
+        : raw;
   }
 }
