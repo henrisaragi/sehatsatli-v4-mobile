@@ -6,6 +6,33 @@ strictly increase between Play Store uploads). Full Indonesian release notes for
 signing details, and known issues per release live in `docs/upload-playstore.md`'s Release Notes
 section — this file is a shorter technical summary per version.
 
+## [4.2.0] - build 5 - unreleased
+
+### Changed
+- **Backend v4 migration.** `ApiEndpoints.baseUrl` now points to
+  `https://sehatsatli.ksdae.kehutanan.go.id/api-v4/` (was `https://apisatli.biodiversity.id/`).
+  Breaking: this build only works against backend v4.
+- **2-step OTP login** (`docs-new-versions/login.md`). The 1-step `api/auth/login-app` is removed
+  and replaced by `api/auth/login` (email + password → `login_token`) followed by
+  `api/auth/otp/verify` (`login_token` + 6-digit OTP → `access_token`). The user profile now comes
+  from `GET api/user`. New `OtpLoginWidget` page.
+
+### Added
+- **Self-service UPT staff registration** (`docs-new-versions/register-upt.md`). The "Register
+  Officer" button on the login screen, which did nothing before, now opens `RegisterUptWidget`:
+  UPT → dependent unit organisasi → personal data → `POST api/registrasi/upt`.
+- **Registration status page** (`RegistrationStatusWidget`). It routes users after login based on
+  `GET api/registrasi/status`: `menunggu` / `ditolak` / `terverifikasi`.
+- `ApiRateLimitException` for HTTP 429 responses, with a "too many attempts" message on login.
+
+### Fixed
+- A 401 on a token-less request (for example, a wrong password at login) no longer triggers the
+  forced-logout `onUnauthorized` handler. Only an authenticated request's 401 does.
+
+### Notes
+- `flutter analyze`: 0 errors. `flutter test`: 20/20 passing. The new login and registration
+  flows have no unit tests yet.
+
 ## [1.1.1] - build 4 - 2026-08-25
 
 ### Fixed
