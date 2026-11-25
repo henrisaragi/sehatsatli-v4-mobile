@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_response_helper.dart';
 import '../../core/network/push_service.dart';
 import '../../core/storage/secure_storage.dart';
 
@@ -103,14 +102,15 @@ class AuthRepository {
   /// JSON — so success here is detected by the presence of `login_token`.
   Future<LoginOtpRequestResult> requestLoginOtp(
       String email, String password) async {
-    final response = await _apiClient.post(
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.authLogin,
       body: {'email': email, 'password': password},
     );
 
-    final loginToken = response['login_token'];
-    if (loginToken is String) {
-      final expiresIn = response['expires_in'];
+    final loginToken = response.body['login_token'];
+    if (response.isSuccess && loginToken is String) {
+      final expiresIn = response.body['expires_in'];
       return LoginOtpRequestResult(
         success: true,
         loginToken: loginToken,
@@ -119,7 +119,9 @@ class AuthRepository {
     }
     return LoginOtpRequestResult(
       success: false,
-      message: extractApiMessage(response) ?? 'Email atau password salah.',
+      message: response.statusCode == 401 && response.body['message'] == null
+          ? 'Email atau password salah.'
+          : response.message,
     );
   }
 
@@ -127,23 +129,25 @@ class AuthRepository {
   /// token. Persists it on success, same as the old single-step login did.
   Future<LoginOtpVerifyResult> verifyLoginOtp(
       String loginToken, String otp) async {
-    final response = await _apiClient.post(
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.authOtpVerify,
       body: {'login_token': loginToken, 'otp': otp},
     );
 
-    final accessToken = response['access_token'];
-    if (accessToken is String) {
+    final accessToken = response.body['access_token'];
+    if (response.isSuccess && accessToken is String) {
       await _secureStorage.saveToken(accessToken);
       return LoginOtpVerifyResult(success: true, accessToken: accessToken);
     }
 
-    final attemptsRemaining = response['attempts_remaining'];
+    final attemptsRemaining = response.body['attempts_remaining'];
     return LoginOtpVerifyResult(
       success: false,
-      message: extractApiMessage(response) ?? 'Gagal memverifikasi OTP.',
+      message: response.message,
       attemptsRemaining: attemptsRemaining is int ? attemptsRemaining : null,
-      tokenInvalid: attemptsRemaining is! int,
+      // A server hiccup says nothing about the login token — keep it.
+      tokenInvalid: !response.isTransient && attemptsRemaining is! int,
     );
   }
 

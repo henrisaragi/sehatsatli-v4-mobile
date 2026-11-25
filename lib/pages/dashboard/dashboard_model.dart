@@ -1,5 +1,4 @@
 import '/backend/backend.dart';
-import '/components/action_card/action_card_widget.dart';
 import '/components/button/button_widget.dart';
 import '/components/report_item/report_item_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -20,22 +19,18 @@ class DashboardModel extends FlutterFlowModel<DashboardWidget> {
 
   // Model for Button.
   late ButtonModel buttonModel1;
-  // Model for ActionCard.
-  late ActionCardModel actionCardModel1;
   // Model for Button.
   late ButtonModel buttonModel2;
 
   @override
   void initState(BuildContext context) {
     buttonModel1 = createModel(context, () => ButtonModel());
-    actionCardModel1 = createModel(context, () => ActionCardModel());
     buttonModel2 = createModel(context, () => ButtonModel());
   }
 
   @override
   void dispose() {
     buttonModel1.dispose();
-    actionCardModel1.dispose();
     buttonModel2.dispose();
   }
 }

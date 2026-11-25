@@ -160,8 +160,11 @@ class FormReadonlyRow extends StatelessWidget {
 }
 
 /// Shown under a disabled submit button.
+/// Under a disabled submit button: which fields still block it.
 class FormMissingHint extends StatelessWidget {
-  const FormMissingHint({super.key});
+  const FormMissingHint({super.key, required this.missing});
+
+  final List<String> missing;
 
   @override
   Widget build(BuildContext context) {
@@ -169,9 +172,9 @@ class FormMissingHint extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(top: 8.0),
       child: Text(
-        'Lengkapi kolom bertanda * untuk melanjutkan.',
+        'Belum lengkap: ${missing.join(', ')}.',
         textAlign: TextAlign.center,
-        style: theme.bodySmall.override(color: theme.secondaryText),
+        style: theme.bodySmall.override(color: theme.error),
       ),
     );
   }

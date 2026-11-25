@@ -18,6 +18,12 @@ const Map<String, String> tahapLabels = {
   'selesai': 'Selesai',
 };
 
+/// List titles for reports still waiting at a stage (dashboard shortcuts).
+const Map<String, String> tahapPendingLabels = {
+  'investigasi': 'Belum Diinvestigasi',
+  'verifikasi_dokter': 'Belum Diverifikasi Dokter',
+};
+
 /// The stage that follows [tahap] once its form is submitted.
 String nextTahap(String tahap) {
   final index = tahapOrder.indexOf(tahap);

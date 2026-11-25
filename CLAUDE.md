@@ -61,7 +61,7 @@ lib/
 │   ├── network/
 │   │   ├── api_client.dart        # API Group wrapper & header interceptor
 │   │   ├── connectivity_service.dart # Network reachability monitor
-│   │   └── api_response_helper.dart  # Helper for custom HTTP 200 { success: false }
+│   │   └── api_error_text.dart    # User-facing error wording (network/429/5xx, 422 field labels)
 │   ├── storage/
 │   │   ├── secure_storage.dart    # Passport bearer token management
 │   │   └── local_database.dart    # SQLite initialization & schema definitions
@@ -298,6 +298,7 @@ Backend v4 does not gate the `laporan` wizard: any logged-in user can fill every
 
 1. **Laporan Baru** (`quick_report_widget.dart`): step 1 jenis satwa (P.106 species from cache, or a manual local name) + kelompok umur; step 2 investigasi + GPS + photos. "Lanjut" saves a local draft (`sync_status = 'draft'`); "Kirim Laporan" queues create + investigasi + photos and drains the queue.
 2. **Detail** (`full_report_widget.dart`): completed stages read-only, plus the form for the current `tahap` (verifikasi dokter, then hasil lab). The next stage can be queued offline even while earlier ones are still pending.
+3. **Rejected stage** (4xx on a stage `PUT`): the detail page swaps the next-stage form for "Perbaiki <tahap>", prefilled with the rejected request and showing the server's errors. "Simpan & Kirim Ulang" (`ReportRepository.resubmitRejectedStage`) replaces that `sync_queue` job's payload in place, so stage order is kept. A rejected create or photo has no form: "Kirim ulang", or delete it locally and create it again.
 
 ---
 

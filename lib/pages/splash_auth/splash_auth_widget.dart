@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'splash_auth_model.dart';
+import '/core/network/api_error_text.dart';
 export 'splash_auth_model.dart';
 
 class SplashAuthWidget extends StatefulWidget {
@@ -549,10 +550,10 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                             'Login failed. Please check your credentials.';
                                       } on ApiRateLimitException {
                                         _model.error =
-                                            'Terlalu banyak percobaan, coba lagi nanti.';
+                                            rateLimitText;
                                       } on ApiNetworkException {
                                         _model.error =
-                                            'Cannot reach the server. Check your internet connection.';
+                                            networkErrorText;
                                       } finally {
                                         _model.isLoggingIn = false;
                                         safeSetState(() {});

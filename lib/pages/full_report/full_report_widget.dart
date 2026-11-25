@@ -9,6 +9,7 @@ import '/components/repeater_list/repeater_list_widget.dart';
 import '/components/search_select/search_select_widget.dart';
 import '/components/text_field/text_field_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/core/utils/error_bottom_sheet.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
@@ -54,6 +55,10 @@ class _FullReportWidgetState extends State<FullReportWidget> {
   bool _isSaving = false;
   bool _isRetrying = false;
 
+  /// The stage the server rejected; while set, its form (prefilled with
+  /// what was sent) replaces the next-stage form so the user can fix it.
+  RejectedStage? _rejected;
+
   // Forms of the stages that can still be filled.
   final InvestigasiFormData _investigasi = InvestigasiFormData();
   final _VerifikasiFormData _verifikasi = _VerifikasiFormData();
@@ -83,13 +88,17 @@ class _FullReportWidgetState extends State<FullReportWidget> {
     _penyakitOptions = await MasterRepository().getCachedPenyakit();
 
     var clientId = widget.clientId;
-    var local = clientId != null ? await SQLiteManager.instance.getLocalReport(clientId) : null;
+    var local = clientId != null
+        ? await SQLiteManager.instance.getLocalReport(clientId)
+        : null;
 
     if (local?.syncStatus == 'draft') {
       if (!mounted) return;
       context.pushReplacementNamed(
         QuickReportWidget.routeName,
-        queryParameters: {'clientId': serializeParam(clientId, ParamType.String)}.withoutNulls,
+        queryParameters: {
+          'clientId': serializeParam(clientId, ParamType.String)
+        }.withoutNulls,
       );
       return;
     }
@@ -120,26 +129,94 @@ class _FullReportWidgetState extends State<FullReportWidget> {
       return;
     }
 
+    final rejected = local.syncStatus == 'failed' && clientId != null
+        ? await _repository.rejectedStage(clientId)
+        : null;
+    if (!mounted) return;
+
     setState(() {
+      _rejected = rejected;
       _clientId = clientId;
       _serverId = local!.serverId;
       _syncStatus = local.syncStatus;
       _lastError = local.lastError;
       _laporan = jsonDecode(local.payloadJson ?? '{}') as Map<String, dynamic>;
+      if (rejected != null) _prefillRejected(rejected);
       _isLoading = false;
     });
   }
 
+  /// Loads the rejected request into its stage form.
+  void _prefillRejected(RejectedStage rejected) {
+    final sent = rejected.payload;
+    switch (rejected.tahap) {
+      case 'investigasi':
+        _investigasi.loadDraft({
+          ...sent,
+          'dugaan_penyakit': _laporan['dugaan_penyakit'] ??
+              _penyakitNameById(sent['id_penyakit']),
+          'photo_paths': const <String>[],
+        });
+      case 'verifikasi_dokter':
+        _verifikasi
+          ..suspekPenyakit = _isTrue(sent['verifikasi_suspek_penyakit'])
+          ..aksiDilakukan = sent['aksi_dilakukan']?.toString() ?? ''
+          ..informasiTambahan = sent['informasi_tambahan']?.toString() ?? '';
+      case 'hasil_lab':
+        _hasilLab
+          ..penyakitId = sent['penyakit_id']?.toString()
+          ..penyakitLabel = _penyakitNameById(sent['penyakit_id'])
+          ..diagnosisPenyakit = sent['diagnosis_penyakit']?.toString() ?? ''
+          ..aksiLanjutan = sent['aksi_lanjutan']?.toString() ?? ''
+          ..investigasiLanjutan = _isTrue(sent['investigasi_lanjutan'])
+          ..periodeMulai = DateTime.tryParse(
+              sent['periode_investigasi_mulai']?.toString() ?? '')
+          ..periodeSelesai = DateTime.tryParse(
+              sent['periode_investigasi_selesai']?.toString() ?? '')
+          ..tindakanLanjutan = sent['tindakan_lanjutan']?.toString() ?? ''
+          ..keteranganTambahan = sent['keterangan_tambahan']?.toString() ?? '';
+        _hasilLab.barangBukti
+          ..clear()
+          ..addAll([
+            for (final b
+                in [...?(sent['barang_bukti'] as List?)].whereType<Map>())
+              {
+                'jenis_barang_bukti': b['jenis_barang_bukti']?.toString() ?? '',
+                'jumlah': b['jumlah']?.toString() ?? '',
+                'keterangan': b['keterangan']?.toString() ?? '',
+              },
+          ]);
+    }
+  }
+
+  String? _penyakitNameById(dynamic id) {
+    if (id == null) return null;
+    for (final option in _penyakitOptions) {
+      if (option['id']?.toString() == id.toString())
+        return option['nama']?.toString();
+    }
+    return null;
+  }
+
   Future<void> _submitStage(String tahap, Map<String, dynamic> payload,
-      {Map<String, dynamic> display = const {}, List<String> photos = const []}) async {
+      {Map<String, dynamic> display = const {},
+      List<String> photos = const []}) async {
     setState(() => _isSaving = true);
-    final result = await _repository.submitStage(
-      clientId: _clientId!,
-      tahap: tahap,
-      payload: payload,
-      display: display,
-      photoPaths: photos,
-    );
+    final result = _rejected?.tahap == tahap
+        ? await _repository.resubmitRejectedStage(
+            clientId: _clientId!,
+            tahap: tahap,
+            payload: payload,
+            display: display,
+            photoPaths: photos,
+          )
+        : await _repository.submitStage(
+            clientId: _clientId!,
+            tahap: tahap,
+            payload: payload,
+            display: display,
+            photoPaths: photos,
+          );
     if (!mounted) return;
     setState(() => _isSaving = false);
     _showResult(result);
@@ -156,14 +233,22 @@ class _FullReportWidgetState extends State<FullReportWidget> {
   }
 
   void _showResult(ReportSubmitResult result) {
-    showSnackbar(
-      context,
-      switch (result.status) {
-        ReportSubmitStatus.sent => 'Terkirim ke server.',
-        ReportSubmitStatus.queuedOffline => 'Tersimpan di perangkat — dikirim otomatis saat online.',
-        ReportSubmitStatus.failed => 'Server menolak: ${result.message ?? '-'}',
-      },
-    );
+    switch (result.status) {
+      case ReportSubmitStatus.sent:
+        showSnackbar(context, result.userMessage);
+      case ReportSubmitStatus.queuedOffline:
+        if (result.message == null) {
+          showSnackbar(context, result.userMessage);
+        } else {
+          showErrorBottomSheet(context, result.userMessage,
+              title: 'Belum terkirim — tersimpan di perangkat',
+              icon: LucideIcons.cloudOff,
+              warning: true);
+        }
+      case ReportSubmitStatus.failed:
+        showErrorBottomSheet(context, result.userMessage,
+            title: 'Laporan ditolak server');
+    }
   }
 
   Future<void> _deleteLocal() async {
@@ -174,8 +259,12 @@ class _FullReportWidgetState extends State<FullReportWidget> {
         content: Text(
             'Laporan ini belum ada di server. Data yang dihapus tidak bisa dikembalikan.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text('Batal')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text('Hapus')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('Hapus')),
         ],
       ),
     );
@@ -203,7 +292,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
                         child: Padding(
                           padding: EdgeInsets.all(24.0),
                           child: Text(_loadError!,
-                              textAlign: TextAlign.center, style: theme.bodyMedium),
+                              textAlign: TextAlign.center,
+                              style: theme.bodyMedium),
                         ),
                       )
                     : RefreshIndicator(
@@ -215,7 +305,17 @@ class _FullReportWidgetState extends State<FullReportWidget> {
                               : [
                                   _statusCard(theme),
                                   ..._completedSections(theme),
-                                  if (_tahap != 'selesai') _currentStageCard(theme),
+                                  if (_rejected != null)
+                                    KeyedSubtree(
+                                      key: ValueKey('fix-${_rejected!.tahap}'),
+                                      child:
+                                          _stageCard(theme, _rejected!.tahap),
+                                    )
+                                  else if (_tahap != 'selesai')
+                                    KeyedSubtree(
+                                      key: ValueKey('stage-$_tahap'),
+                                      child: _stageCard(theme, _tahap),
+                                    ),
                                 ].divide(SizedBox(height: 16.0)),
                         ),
                       ),
@@ -245,7 +345,9 @@ class _FullReportWidgetState extends State<FullReportWidget> {
               ),
               Expanded(
                 child: Text(
-                  _isLoading || _loadError != null ? 'Laporan' : jenisLabel(_laporan),
+                  _isLoading || _loadError != null
+                      ? 'Laporan'
+                      : jenisLabel(_laporan),
                   overflow: TextOverflow.ellipsis,
                   style: theme.titleLarge.override(
                     font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
@@ -290,7 +392,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
 
   Widget _statusCard(FlutterFlowTheme theme) {
     final serverTahap = _serverTahap;
-    final stepIndex = serverTahap == null ? -1 : tahapOrder.indexOf(serverTahap);
+    final stepIndex =
+        serverTahap == null ? -1 : tahapOrder.indexOf(serverTahap);
     return _card(
       theme,
       title: serverTahap == null
@@ -320,18 +423,37 @@ class _FullReportWidgetState extends State<FullReportWidget> {
             ),
             SizedBox(width: 8.0),
             Expanded(
-              child: Text(ReportListItem.syncStatusLabels[_syncStatus] ?? _syncStatus,
+              child: Text(
+                  ReportListItem.syncStatusLabels[_syncStatus] ?? _syncStatus,
                   style: theme.bodyMedium),
             ),
             if (_syncStatus == 'failed' || _syncStatus == 'pending')
               TextButton(
                 onPressed: _isRetrying ? null : _retry,
-                child: Text(_syncStatus == 'failed' ? 'Kirim ulang' : 'Kirim sekarang'),
+                child: Text(
+                    _syncStatus == 'failed' ? 'Kirim ulang' : 'Kirim sekarang'),
               ),
           ],
         ),
-        if (_syncStatus == 'failed' && _lastError != null)
-          Text(_lastError!, style: theme.bodySmall.override(color: theme.error)),
+        // A rejected stage shows its error on the fix form instead.
+        if (_rejected == null &&
+            _lastError != null &&
+            (_syncStatus == 'failed' || _syncStatus == 'pending'))
+          Container(
+            margin: EdgeInsets.only(top: 8.0),
+            padding: EdgeInsets.all(12.0),
+            decoration: BoxDecoration(
+              color: _syncStatus == 'failed' ? theme.accent4 : theme.accent2,
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            child: Text(
+              _syncStatus == 'failed'
+                  ? '$_lastError\n\nPeriksa data laporan ini, lalu tekan "Kirim ulang".'
+                  : _lastError!,
+              style: theme.bodySmall.override(
+                  color: _syncStatus == 'failed' ? theme.error : theme.warning),
+            ),
+          ),
       ],
     );
   }
@@ -339,50 +461,74 @@ class _FullReportWidgetState extends State<FullReportWidget> {
   List<Widget> _completedSections(FlutterFlowTheme theme) {
     final l = _laporan;
     final stepIndex = tahapOrder.indexOf(_tahap);
+    // Filled stages are shown read-only — except one being corrected, whose
+    // form is shown below instead.
+    bool filled(String tahap) =>
+        stepIndex > tahapOrder.indexOf(tahap) && _rejected?.tahap != tahap;
     final fotoRemote = [...?(l['foto'] as List?)].whereType<Map>().toList();
-    final fotoLokal = [...?(l['foto_lokal'] as List?)].whereType<String>().toList();
+    final fotoLokal =
+        [...?(l['foto_lokal'] as List?)].whereType<String>().toList();
     return [
       _card(theme, title: 'Jenis Satwa', children: [
         FormReadonlyRow(label: 'Jenis', value: jenisLabel(l)),
         FormReadonlyRow(
           label: 'Status Perlindungan',
-          value: l['status_perlindungan'] == 'dilindungi' ? 'Dilindungi' : 'Tidak Dilindungi',
+          value: l['status_perlindungan'] == 'dilindungi'
+              ? 'Dilindungi'
+              : 'Tidak Dilindungi',
         ),
         FormReadonlyRow(
           label: 'Kelompok Umur',
           value: optionLabelFor(kelompokUmurOptions, l['kelompok_umur']),
         ),
       ]),
-      if (stepIndex > 0)
+      if (filled('investigasi'))
         _card(theme, title: 'Investigasi', children: [
-          FormReadonlyRow(label: 'Tanggal Kejadian', value: _date(l['tanggal_kejadian'])),
-          FormReadonlyRow(label: 'Jumlah Sakit', value: l['jumlah_sakit']?.toString()),
-          FormReadonlyRow(label: 'Jumlah Mati', value: l['jumlah_mati']?.toString()),
+          FormReadonlyRow(
+              label: 'Tanggal Kejadian', value: _date(l['tanggal_kejadian'])),
+          FormReadonlyRow(
+              label: 'Jumlah Sakit', value: l['jumlah_sakit']?.toString()),
+          FormReadonlyRow(
+              label: 'Jumlah Mati', value: l['jumlah_mati']?.toString()),
           if (l['kondisi_jika_mati'] != null)
-            FormReadonlyRow(label: 'Kondisi Jika Mati', value: l['kondisi_jika_mati']?.toString()),
-          FormReadonlyRow(label: 'Kronologi', value: l['kronologi']?.toString()),
-          FormReadonlyRow(label: 'Tindak Lanjut', value: l['tindak_lanjut']?.toString()),
+            FormReadonlyRow(
+                label: 'Kondisi Jika Mati',
+                value: l['kondisi_jika_mati']?.toString()),
+          FormReadonlyRow(
+              label: 'Kronologi', value: l['kronologi']?.toString()),
+          FormReadonlyRow(
+              label: 'Tindak Lanjut', value: l['tindak_lanjut']?.toString()),
           FormReadonlyRow(
             label: 'Kesimpulan Awal',
             value: optionLabelFor(kesimpulanAwalOptions, l['kesimpulan_awal']),
           ),
-          FormReadonlyRow(label: 'Dugaan Penyakit', value: l['dugaan_penyakit']?.toString()),
-          FormReadonlyRow(label: 'Koordinat', value: '${l['latitude'] ?? '-'}, ${l['longitude'] ?? '-'}'),
+          FormReadonlyRow(
+              label: 'Dugaan Penyakit',
+              value: l['dugaan_penyakit']?.toString()),
+          FormReadonlyRow(
+              label: 'Koordinat',
+              value: '${l['latitude'] ?? '-'}, ${l['longitude'] ?? '-'}'),
         ]),
-      if (stepIndex > 1)
+      if (filled('verifikasi_dokter'))
         _card(theme, title: 'Verifikasi Dokter', children: [
           FormReadonlyRow(
             label: 'Verifikasi Suspek Penyakit',
             value: _isTrue(l['verifikasi_suspek_penyakit']) ? 'Ya' : 'Tidak',
           ),
-          FormReadonlyRow(label: 'Aksi Dilakukan', value: l['aksi_dilakukan']?.toString()),
-          FormReadonlyRow(label: 'Informasi Tambahan', value: l['informasi_tambahan']?.toString()),
+          FormReadonlyRow(
+              label: 'Aksi Dilakukan', value: l['aksi_dilakukan']?.toString()),
+          FormReadonlyRow(
+              label: 'Informasi Tambahan',
+              value: l['informasi_tambahan']?.toString()),
         ]),
-      if (stepIndex > 2)
+      if (filled('hasil_lab'))
         _card(theme, title: 'Hasil Lab', children: [
           FormReadonlyRow(label: 'Penyakit', value: _penyakitName(l)),
-          FormReadonlyRow(label: 'Diagnosis Penyakit', value: l['diagnosis_penyakit']?.toString()),
-          FormReadonlyRow(label: 'Aksi Lanjutan', value: l['aksi_lanjutan']?.toString()),
+          FormReadonlyRow(
+              label: 'Diagnosis Penyakit',
+              value: l['diagnosis_penyakit']?.toString()),
+          FormReadonlyRow(
+              label: 'Aksi Lanjutan', value: l['aksi_lanjutan']?.toString()),
           FormReadonlyRow(
             label: 'Investigasi Lanjutan',
             value: _isTrue(l['investigasi_lanjutan']) ? 'Ya' : 'Tidak',
@@ -393,14 +539,19 @@ class _FullReportWidgetState extends State<FullReportWidget> {
                 ? null
                 : '${_date(l['periode_investigasi_mulai'])} – ${_date(l['periode_investigasi_selesai'])}',
           ),
-          for (final bukti in [...?(l['barang_bukti'] as List?)].whereType<Map>())
+          for (final bukti
+              in [...?(l['barang_bukti'] as List?)].whereType<Map>())
             FormReadonlyRow(
               label: 'Barang Bukti',
               value: '${bukti['jenis_barang_bukti']} (${bukti['jumlah']})'
                   '${bukti['keterangan'] != null ? ' — ${bukti['keterangan']}' : ''}',
             ),
-          FormReadonlyRow(label: 'Tindakan Lanjutan', value: l['tindakan_lanjutan']?.toString()),
-          FormReadonlyRow(label: 'Keterangan Tambahan', value: l['keterangan_tambahan']?.toString()),
+          FormReadonlyRow(
+              label: 'Tindakan Lanjutan',
+              value: l['tindakan_lanjutan']?.toString()),
+          FormReadonlyRow(
+              label: 'Keterangan Tambahan',
+              value: l['keterangan_tambahan']?.toString()),
         ]),
       if (fotoRemote.isNotEmpty || fotoLokal.isNotEmpty)
         _card(theme, title: 'Foto', children: [
@@ -409,8 +560,10 @@ class _FullReportWidgetState extends State<FullReportWidget> {
             runSpacing: 8.0,
             children: [
               for (final foto in fotoRemote)
-                if (foto['url'] is String) _thumb(Image.network(foto['url'], fit: BoxFit.cover)),
-              for (final path in fotoLokal) _thumb(Image.file(File(path), fit: BoxFit.cover)),
+                if (foto['url'] is String)
+                  _thumb(Image.network(foto['url'], fit: BoxFit.cover)),
+              for (final path in fotoLokal)
+                _thumb(Image.file(File(path), fit: BoxFit.cover)),
             ],
           ),
           if (fotoLokal.isNotEmpty)
@@ -423,10 +576,20 @@ class _FullReportWidgetState extends State<FullReportWidget> {
     ];
   }
 
-  Widget _currentStageCard(FlutterFlowTheme theme) {
-    switch (_tahap) {
+  /// The form of [tahap]: the next stage to fill, or — when the server
+  /// rejected [tahap] — the same form prefilled for correcting it.
+  Widget _stageCard(FlutterFlowTheme theme, String tahap) {
+    final fixing = _rejected?.tahap == tahap;
+    String title(String normal) =>
+        fixing ? 'Perbaiki ${tahapLabels[tahap] ?? tahap}' : normal;
+    String button(String normal) => fixing ? 'Simpan & Kirim Ulang' : normal;
+    final rejectionNotice = [
+      if (fixing) _rejectionNotice(theme, _rejected!.error)
+    ];
+    switch (tahap) {
       case 'investigasi':
-        return _card(theme, title: 'Isi Investigasi', children: [
+        return _card(theme, title: title('Isi Investigasi'), children: [
+          ...rejectionNotice,
           InvestigasiFormFields(
             data: _investigasi,
             penyakitOptions: _penyakitOptions,
@@ -434,14 +597,17 @@ class _FullReportWidgetState extends State<FullReportWidget> {
           ),
           SizedBox(height: 16.0),
           _submitButton(
-            label: 'Simpan Investigasi',
-            enabled: _investigasi.isValid,
-            onPressed: () => _submitStage('investigasi', _investigasi.toPayload(),
-                display: _investigasi.toDisplay(), photos: _investigasi.photoPaths),
+            label: button('Simpan Investigasi'),
+            missing: _investigasi.missingFields,
+            onPressed: () => _submitStage(
+                'investigasi', _investigasi.toPayload(),
+                display: _investigasi.toDisplay(),
+                photos: _investigasi.photoPaths),
           ),
         ]);
       case 'verifikasi_dokter':
-        return _card(theme, title: 'Verifikasi Dokter', children: [
+        return _card(theme, title: title('Verifikasi Dokter'), children: [
+          ...rejectionNotice,
           FormSwitchRow(
             label: 'Verifikasi Suspek Penyakit',
             value: _verifikasi.suspekPenyakit,
@@ -461,13 +627,15 @@ class _FullReportWidgetState extends State<FullReportWidget> {
           ),
           SizedBox(height: 16.0),
           _submitButton(
-            label: 'Simpan Verifikasi',
-            enabled: _verifikasi.isValid,
-            onPressed: () => _submitStage('verifikasi_dokter', _verifikasi.toPayload()),
+            label: button('Simpan Verifikasi'),
+            missing: _verifikasi.missingFields,
+            onPressed: () =>
+                _submitStage('verifikasi_dokter', _verifikasi.toPayload()),
           ),
         ]);
       default:
-        return _card(theme, title: 'Hasil Lab', children: [
+        return _card(theme, title: title('Hasil Lab'), children: [
+          ...rejectionNotice,
           SearchSelectWidget(
             label: 'Penyakit',
             hint: 'Cari penyakit...',
@@ -516,7 +684,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
                   label: 'Selesai',
                   date: _hasilLab.periodeSelesai,
                   firstDate: _hasilLab.periodeMulai,
-                  onChanged: (v) => setState(() => _hasilLab.periodeSelesai = v),
+                  onChanged: (v) =>
+                      setState(() => _hasilLab.periodeSelesai = v),
                 ),
               ),
             ],
@@ -527,8 +696,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
           RepeaterListWidget<Map<String, String>>(
             items: _hasilLab.barangBukti,
             addLabel: 'Tambah Barang Bukti',
-            onAdd: () => setState(() => _hasilLab.barangBukti
-                .add({'jenis_barang_bukti': '', 'jumlah': '', 'keterangan': ''})),
+            onAdd: () => setState(() => _hasilLab.barangBukti.add(
+                {'jenis_barang_bukti': '', 'jumlah': '', 'keterangan': ''})),
             onRemove: (i) => setState(() => _hasilLab.barangBukti.removeAt(i)),
             rowBuilder: (context, i, item) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -538,7 +707,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
                   hint: 'mis. Sampel darah',
                   value: item['jenis_barang_bukti'] ?? '',
                   variant: 'outlined',
-                  onChanged: (v) => setState(() => item['jenis_barang_bukti'] = v),
+                  onChanged: (v) =>
+                      setState(() => item['jenis_barang_bukti'] = v),
                 ),
                 TextFieldWidget(
                   label: 'Jumlah *',
@@ -571,21 +741,49 @@ class _FullReportWidgetState extends State<FullReportWidget> {
           ),
           SizedBox(height: 16.0),
           _submitButton(
-            label: 'Simpan Hasil Lab',
-            enabled: _hasilLab.isValid,
-            onPressed: () => _submitStage('hasil_lab', _hasilLab.toPayload(),
-                display: {
-                  if (_hasilLab.penyakitLabel != null)
-                    'penyakit': {'id': _hasilLab.penyakitId, 'nama': _hasilLab.penyakitLabel},
-                }),
+            label: button('Simpan Hasil Lab'),
+            missing: _hasilLab.missingFields,
+            onPressed: () =>
+                _submitStage('hasil_lab', _hasilLab.toPayload(), display: {
+              if (_hasilLab.penyakitLabel != null)
+                'penyakit': {
+                  'id': _hasilLab.penyakitId,
+                  'nama': _hasilLab.penyakitLabel
+                },
+            }),
           ),
         ]);
     }
   }
 
+  Widget _rejectionNotice(FlutterFlowTheme theme, String error) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16.0),
+      padding: EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: theme.accent4,
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.circleAlert, color: theme.error, size: 18.0),
+          SizedBox(width: 8.0),
+          Expanded(
+            child: Text(
+              '$error\n\nPerbaiki data di bawah sesuai pesan ini, lalu tekan '
+              '"Simpan & Kirim Ulang".',
+              style: theme.bodySmall.override(color: theme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _submitButton({
     required String label,
-    required bool enabled,
+    required List<String> missing,
     required VoidCallback onPressed,
   }) {
     return Column(
@@ -594,14 +792,15 @@ class _FullReportWidgetState extends State<FullReportWidget> {
         FormSubmitButton(
           label: label,
           isSaving: _isSaving,
-          onPressed: enabled ? onPressed : null,
+          onPressed: missing.isEmpty ? onPressed : null,
         ),
-        if (!enabled) FormMissingHint(),
+        if (missing.isNotEmpty) FormMissingHint(missing: missing),
       ],
     );
   }
 
-  Widget _card(FlutterFlowTheme theme, {required String title, required List<Widget> children}) {
+  Widget _card(FlutterFlowTheme theme,
+      {required String title, required List<Widget> children}) {
     return Container(
       padding: EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -612,7 +811,8 @@ class _FullReportWidgetState extends State<FullReportWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: theme.titleMedium.override(fontWeight: FontWeight.bold)),
+          Text(title,
+              style: theme.titleMedium.override(fontWeight: FontWeight.bold)),
           SizedBox(height: 8.0),
           ...children,
         ],
@@ -629,7 +829,9 @@ class _FullReportWidgetState extends State<FullReportWidget> {
 
   static String? _date(dynamic raw) {
     final parsed = DateTime.tryParse(raw?.toString() ?? '');
-    return parsed == null ? raw?.toString() : dateTimeFormat('d MMM yyyy', parsed.toLocal());
+    return parsed == null
+        ? raw?.toString()
+        : dateTimeFormat('d MMM yyyy', parsed.toLocal());
   }
 
   static String? _penyakitName(Map<String, dynamic> l) {
@@ -644,12 +846,17 @@ class _VerifikasiFormData {
   String aksiDilakukan = '';
   String informasiTambahan = '';
 
-  bool get isValid => aksiDilakukan.trim().isNotEmpty;
+  List<String> get missingFields => [
+        if (aksiDilakukan.trim().isEmpty) 'Aksi dilakukan',
+      ];
+
+  bool get isValid => missingFields.isEmpty;
 
   Map<String, dynamic> toPayload() => {
         'verifikasi_suspek_penyakit': suspekPenyakit,
         'aksi_dilakukan': aksiDilakukan.trim(),
-        if (informasiTambahan.trim().isNotEmpty) 'informasi_tambahan': informasiTambahan.trim(),
+        if (informasiTambahan.trim().isNotEmpty)
+          'informasi_tambahan': informasiTambahan.trim(),
       };
 }
 
@@ -666,23 +873,30 @@ class _HasilLabFormData {
   String tindakanLanjutan = '';
   String keteranganTambahan = '';
 
-  bool get isValid {
-    if (periodeMulai != null && periodeSelesai != null && periodeSelesai!.isBefore(periodeMulai!)) {
-      return false;
-    }
-    return barangBukti.every((b) =>
-        (b['jenis_barang_bukti'] ?? '').trim().isNotEmpty && (b['jumlah'] ?? '').trim().isNotEmpty);
-  }
+  List<String> get missingFields => [
+        if (periodeMulai != null &&
+            periodeSelesai != null &&
+            periodeSelesai!.isBefore(periodeMulai!))
+          'Periode investigasi selesai tidak boleh sebelum tanggal mulai',
+        for (var i = 0; i < barangBukti.length; i++)
+          if ((barangBukti[i]['jenis_barang_bukti'] ?? '').trim().isEmpty ||
+              (barangBukti[i]['jumlah'] ?? '').trim().isEmpty)
+            'Barang bukti #${i + 1}: jenis dan jumlah',
+      ];
+
+  bool get isValid => missingFields.isEmpty;
 
   Map<String, dynamic> toPayload() => {
         'penyakit_id': penyakitId,
         'diagnosis_penyakit': _orNull(diagnosisPenyakit),
         'aksi_lanjutan': _orNull(aksiLanjutan),
         'investigasi_lanjutan': investigasiLanjutan,
-        'periode_investigasi_mulai':
-            periodeMulai == null ? null : dateTimeFormat('yyyy-MM-dd', periodeMulai!),
-        'periode_investigasi_selesai':
-            periodeSelesai == null ? null : dateTimeFormat('yyyy-MM-dd', periodeSelesai!),
+        'periode_investigasi_mulai': periodeMulai == null
+            ? null
+            : dateTimeFormat('yyyy-MM-dd', periodeMulai!),
+        'periode_investigasi_selesai': periodeSelesai == null
+            ? null
+            : dateTimeFormat('yyyy-MM-dd', periodeSelesai!),
         'barang_bukti': [
           for (final b in barangBukti)
             {

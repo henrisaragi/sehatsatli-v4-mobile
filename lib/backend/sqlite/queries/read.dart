@@ -98,6 +98,22 @@ Future<Set<String>> performGetClientIdsWithFailedSyncItems(Database database) as
   return rows.map((r) => r['client_id'] as String).toSet();
 }
 
+/// The job the server rejected for [clientId] (at most one: later jobs of
+/// that report wait behind it).
+Future<GetPendingSyncQueueRow?> performGetFailedSyncItem(
+  Database database,
+  String clientId,
+) async {
+  final rows = await database.query(
+    'sync_queue',
+    where: "client_id = ? AND status = 'failed'",
+    whereArgs: [clientId],
+    orderBy: 'created_at ASC, id ASC',
+    limit: 1,
+  );
+  return rows.isEmpty ? null : GetPendingSyncQueueRow(rows.first);
+}
+
 Future<List<GetPendingSyncQueueRow>> performGetPendingSyncQueue(
   Database database,
 ) {

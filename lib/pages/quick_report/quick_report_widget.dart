@@ -76,9 +76,11 @@ class _QuickReportWidgetState extends State<QuickReportWidget> {
     }
   }
 
-  bool get _isStep1Valid =>
-      _kelompokUmur != null &&
-      (_dilindungi ? _spesies != null : _namaJenisLokal.trim().isNotEmpty);
+  List<String> get _step1Missing => [
+        if (_dilindungi && _spesies == null) 'Jenis satwa',
+        if (!_dilindungi && _namaJenisLokal.trim().isEmpty) 'Nama jenis lokal',
+        if (_kelompokUmur == null) 'Kelompok umur',
+      ];
 
   Map<String, dynamic> get _createPayload => {
         if (_dilindungi) 'spesies_id': _spesies!['id'] else 'nama_jenis_lokal': _namaJenisLokal.trim(),
@@ -123,13 +125,12 @@ class _QuickReportWidgetState extends State<QuickReportWidget> {
 
     // Queued locally either way; a server rejection is shown (with retry) on
     // the detail page.
+    // The detail page keeps showing the reason; the snackbar survives the
+    // page replacement below.
     showSnackbar(
       context,
-      switch (result.status) {
-        ReportSubmitStatus.sent => 'Laporan terkirim.',
-        ReportSubmitStatus.queuedOffline => 'Tersimpan di perangkat — dikirim otomatis saat online.',
-        ReportSubmitStatus.failed => 'Server menolak laporan: ${result.message ?? '-'}',
-      },
+      result.status == ReportSubmitStatus.sent ? 'Laporan terkirim.' : result.userMessage,
+      duration: result.status == ReportSubmitStatus.sent ? 4 : 10,
     );
     context.pushReplacementNamed(
       FullReportWidget.routeName,
@@ -238,7 +239,8 @@ class _QuickReportWidgetState extends State<QuickReportWidget> {
 
   Widget _buildNavBar(FlutterFlowTheme theme) {
     final isLast = _step == 1;
-    final canContinue = isLast ? _investigasi.isValid : _isStep1Valid;
+    final missing = isLast ? _investigasi.missingFields : _step1Missing;
+    final canContinue = missing.isEmpty;
     return Container(
       padding: EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -269,7 +271,7 @@ class _QuickReportWidgetState extends State<QuickReportWidget> {
               ),
             ],
           ),
-          if (!canContinue) FormMissingHint(),
+          if (!canContinue) FormMissingHint(missing: missing),
         ],
       ),
     );

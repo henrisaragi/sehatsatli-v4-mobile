@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../constants/api_endpoints.dart';
+import 'api_error_text.dart';
 
 /// Thrown when the request never reached the server (no connection, DNS
 /// failure, timeout) — distinct from the server answering with an error
@@ -43,16 +44,30 @@ class ApiResponse {
   /// gateway timeout) — as opposed to a 4xx the request itself caused.
   bool get isTransient => statusCode >= 500 || statusCode == 408;
 
-  /// Flattens Laravel's `{message, errors: {field: [..]}}` into one line.
+  /// One user-facing line (or one line per invalid field) for a failed
+  /// answer: Laravel's `{message, errors: {field: [..]}}` reworded in
+  /// Indonesian with field labels, and generic text for 5xx/403/404 instead
+  /// of Laravel's bare "Server Error".
   String get message {
+    if (statusCode >= 500) return serverErrorText(statusCode);
     final errors = body['errors'];
     if (errors is Map && errors.isNotEmpty) {
-      return errors.values
-          .map((v) => v is List ? v.join(', ') : v.toString())
-          .join(', ');
+      return errors.entries.map((e) {
+        final first = e.value is List && (e.value as List).isNotEmpty
+            ? (e.value as List).first.toString()
+            : e.value.toString();
+        return '${fieldLabel(e.key.toString())}: ${translateValidation(first)}';
+      }).join('\n');
     }
     final message = body['message'];
-    if (message is String && message.isNotEmpty) return message;
+    final generic = message is! String ||
+        message.isEmpty ||
+        message == 'This action is unauthorized.' ||
+        message == 'Not Found' ||
+        message.startsWith('No query results for model');
+    if (!generic) return message;
+    if (statusCode == 403) return 'Anda tidak memiliki akses untuk tindakan ini.';
+    if (statusCode == 404) return 'Data tidak ditemukan di server.';
     return 'Server menolak permintaan (HTTP $statusCode).';
   }
 }

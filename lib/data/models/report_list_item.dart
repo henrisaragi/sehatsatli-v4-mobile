@@ -20,9 +20,8 @@ class ReportListItem {
     final isLegacy = row.syncStatus == 'legacy';
     return ReportListItem(
       species: isLegacy ? 'Laporan versi lama' : jenisLabel(payload),
-      status: isLegacy
-          ? 'Versi lama'
-          : (tahapLabels[payload['tahap']] ?? 'Draf'),
+      status:
+          isLegacy ? 'Versi lama' : (tahapLabels[payload['tahap']] ?? 'Draf'),
       syncStatus: row.syncStatus,
       date: _formatDate(row.updatedAt ?? row.createdAt),
       serverId: row.serverId,
@@ -65,7 +64,8 @@ class ReportListItem {
   }
 
   /// Sync state while unsent, wizard stage once on the server.
-  String get badge => isUnsent ? (syncStatusLabels[syncStatus] ?? syncStatus) : status;
+  String get badge =>
+      isUnsent ? (syncStatusLabels[syncStatus] ?? syncStatus) : status;
 
   static const Map<String, String> syncStatusLabels = {
     'draft': 'Draf',
@@ -75,22 +75,30 @@ class ReportListItem {
     'synced': 'Terkirim',
   };
 
-  /// Local rows first (unsent ones on top), then server rows not already
-  /// shown from local data.
+  /// The user's reports for Beranda: unsent local rows on top, then the
+  /// server list. Local `synced` rows can be stale copies cached when a
+  /// report (possibly someone else's) was opened, so they only fill in while
+  /// the server list couldn't be loaded, and only the user's own ones.
   static List<ReportListItem> merge(
     List<GetAllLocalReportsRow> local,
-    List<Map<String, dynamic>> server,
-  ) {
-    final serverIds = server.map((r) => r['id']?.toString()).toSet();
-    final shown = local
-        .where((r) => r.syncStatus != 'synced' || !serverIds.contains(r.serverId))
-        .map(ReportListItem.local)
-        .toList();
+    List<Map<String, dynamic>> server, {
+    required bool serverLoaded,
+    String? userId,
+  }) {
+    final unsent = local.where((r) => r.syncStatus != 'synced');
+    final offlineSynced = serverLoaded
+        ? const <GetAllLocalReportsRow>[]
+        : local.where((r) {
+            if (r.syncStatus != 'synced') return false;
+            final owner = _decode(r.payloadJson)['user_id']?.toString();
+            return userId == null || owner == null || owner == userId;
+          });
     final localItems = [
-      ...shown.where((i) => i.isUnsent),
-      ...shown.where((i) => !i.isUnsent),
+      ...unsent.map(ReportListItem.local),
+      ...offlineSynced.map(ReportListItem.local),
     ];
-    final localServerIds = localItems.map((i) => i.serverId).whereType<String>().toSet();
+    final localServerIds =
+        localItems.map((i) => i.serverId).whereType<String>().toSet();
     return [
       ...localItems,
       ...server

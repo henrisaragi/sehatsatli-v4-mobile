@@ -7,6 +7,7 @@ import '/data/repositories/auth_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import '/core/network/api_error_text.dart';
 
 /// Shown right after a successful login whenever the user isn't a fully
 /// verified UPT staff member yet (docs-new-versions/login.md +
@@ -56,7 +57,7 @@ class _RegistrationStatusWidgetState extends State<RegistrationStatusWidget> {
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() {
-        _error = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
+        _error = networkErrorText;
         _loading = false;
       });
     }

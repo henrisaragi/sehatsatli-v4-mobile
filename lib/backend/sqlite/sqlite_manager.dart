@@ -40,6 +40,9 @@ class SQLiteManager {
         cacheKey,
       );
 
+  Future<GetPendingSyncQueueRow?> getFailedSyncItem(String clientId) =>
+      performGetFailedSyncItem(_database, clientId);
+
   Future<List<GetPendingSyncQueueRow>> getPendingSyncQueue() =>
       performGetPendingSyncQueue(_database);
 
@@ -105,6 +108,9 @@ class SQLiteManager {
 
   Future<void> incrementSyncItemRetry(int id, String error) =>
       performIncrementSyncItemRetry(_database, id: id, lastError: error);
+
+  Future<void> replaceSyncItemPayload(int id, String payloadJson) =>
+      performReplaceSyncItemPayload(_database, id: id, payloadJson: payloadJson);
 
   /// END UPDATE QUERY CALLS
 }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '/core/network/api_client.dart';
+import '/core/network/api_error_text.dart';
 import '/core/network/push_service.dart';
 import '/data/repositories/notification_repository.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -68,12 +69,14 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
         _page = 1;
         _hasMore = page.hasMore;
       });
-      if (page != null) PushService.instance.unreadCount.value = page.unreadCount;
+      if (page != null)
+        PushService.instance.unreadCount.value = page.unreadCount;
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Tidak ada koneksi. Notifikasi hanya bisa dilihat saat online.';
+        _error =
+            'Tidak ada koneksi. Notifikasi hanya bisa dilihat saat online.';
       });
     }
   }
@@ -103,8 +106,14 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
     final token = _token;
     if (token == null) return;
     try {
-      if (!await _repository.markAllRead(token: token)) return;
+      if (!await _repository.markAllRead(token: token)) {
+        if (mounted) {
+          showSnackbar(context, 'Gagal menandai notifikasi. Coba lagi beberapa saat lagi.');
+        }
+        return;
+      }
     } on ApiNetworkException {
+      if (mounted) showSnackbar(context, networkErrorText);
       return;
     }
     if (!mounted) return;
@@ -151,7 +160,8 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                     FlutterFlowIconButton(
                       borderRadius: 8.0,
                       buttonSize: 40.0,
-                      icon: Icon(LucideIcons.arrowLeft, color: theme.primaryText),
+                      icon:
+                          Icon(LucideIcons.arrowLeft, color: theme.primaryText),
                       onPressed: () => context.safePop(),
                     ),
                     SizedBox(width: 4.0),
@@ -159,7 +169,8 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                       child: Text(
                         'Notifikasi',
                         style: theme.titleLarge.override(
-                          font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                          font:
+                              GoogleFonts.poppins(fontWeight: FontWeight.bold),
                           color: theme.primaryText,
                           fontWeight: FontWeight.bold,
                         ),
@@ -170,7 +181,8 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                         onPressed: _markAllRead,
                         child: Text(
                           'Tandai semua dibaca',
-                          style: theme.labelLarge.override(color: theme.primary),
+                          style:
+                              theme.labelLarge.override(color: theme.primary),
                         ),
                       ),
                   ],
@@ -192,6 +204,7 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
     if (_items.isEmpty) {
       return ListView(
         physics: AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
         children: [
           SizedBox(height: 120.0),
           Icon(_error != null ? LucideIcons.wifiOff : LucideIcons.bellOff,
@@ -212,8 +225,12 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
     return ListView.separated(
       controller: _scrollController,
       physics: AlwaysScrollableScrollPhysics(),
+      // The header's SafeArea already takes the status bar; without this the
+      // list adds that inset again above the first item.
+      padding: EdgeInsets.zero,
       itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-      separatorBuilder: (_, __) => Divider(height: 1.0, color: theme.alternate),
+      separatorBuilder: (_, __) =>
+          Divider(height: 1.0, thickness: 1.0, color: theme.alternate),
       itemBuilder: (context, index) {
         if (index == _items.length) {
           return Padding(
@@ -246,8 +263,12 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                 color: isAlert ? theme.accent4 : theme.accent1,
                 shape: BoxShape.circle,
               ),
-              child: Icon(isAlert ? LucideIcons.triangleAlert : LucideIcons.clipboardList,
-                  color: accent, size: 20.0),
+              child: Icon(
+                  isAlert
+                      ? LucideIcons.triangleAlert
+                      : LucideIcons.clipboardList,
+                  color: accent,
+                  size: 20.0),
             ),
             SizedBox(width: 12.0),
             Expanded(
@@ -258,16 +279,21 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                     item.judul,
                     style: theme.bodyLarge.override(
                       color: theme.primaryText,
-                      fontWeight: item.isRead ? FontWeight.w400 : FontWeight.w600,
+                      fontWeight:
+                          item.isRead ? FontWeight.w400 : FontWeight.w600,
                     ),
                   ),
                   SizedBox(height: 2.0),
-                  Text(item.pesan, style: theme.bodyMedium.override(color: theme.secondaryText)),
+                  Text(item.pesan,
+                      style: theme.bodyMedium
+                          .override(color: theme.secondaryText)),
                   if (createdAt != null) ...[
                     SizedBox(height: 4.0),
                     Text(
-                      dateTimeFormat('dd MMMM yyyy, HH:mm', createdAt.toLocal(), locale: 'id'),
-                      style: theme.bodySmall.override(color: theme.secondaryText),
+                      dateTimeFormat('dd MMMM yyyy, HH:mm', createdAt.toLocal(),
+                          locale: 'id'),
+                      style:
+                          theme.bodySmall.override(color: theme.secondaryText),
                     ),
                   ],
                 ],
@@ -278,7 +304,8 @@ class _NotificationsWidgetState extends State<NotificationsWidget> {
                 margin: EdgeInsets.only(left: 8.0, top: 6.0),
                 width: 8.0,
                 height: 8.0,
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: accent, shape: BoxShape.circle),
               ),
           ],
         ),

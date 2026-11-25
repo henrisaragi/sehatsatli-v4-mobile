@@ -10,6 +10,7 @@ import '/data/repositories/auth_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import '/core/network/api_error_text.dart';
 
 final RegExp _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -65,11 +66,14 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
         _resetToken = result.resetToken;
         _step = 2;
       });
+    } on ApiRateLimitException {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      showErrorBottomSheet(context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      showErrorBottomSheet(context, networkErrorText);
     }
   }
 
@@ -102,11 +106,14 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
         _otp = otp;
         _step = 3;
       });
+    } on ApiRateLimitException {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      showErrorBottomSheet(context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      showErrorBottomSheet(context, networkErrorText);
     }
   }
 
@@ -124,10 +131,12 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kode OTP telah dikirim ulang')),
       );
+    } on ApiRateLimitException {
+      if (!mounted) return;
+      showErrorBottomSheet(context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
-      showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      showErrorBottomSheet(context, networkErrorText);
     }
   }
 
@@ -166,11 +175,14 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
             content: Text('Password berhasil diubah. Silakan masuk kembali.')),
       );
       context.goNamed(SplashAuthWidget.routeName);
+    } on ApiRateLimitException {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      showErrorBottomSheet(context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      showErrorBottomSheet(context, networkErrorText);
     }
   }
 

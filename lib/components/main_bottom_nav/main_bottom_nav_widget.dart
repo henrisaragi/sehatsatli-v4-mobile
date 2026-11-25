@@ -10,7 +10,7 @@ import '/index.dart';
 enum MainTab { beranda, laporan, sinkron, profil }
 
 /// Floating pill bottom bar (Instagram-style): icons only, the active tab
-/// sits on a soft pill.
+/// is shown by its icon colour.
 class MainBottomNavWidget extends StatelessWidget {
   const MainBottomNavWidget({
     super.key,
@@ -126,21 +126,11 @@ class _NavButton extends StatelessWidget {
             onTap: onTap,
             customBorder: const StadiumBorder(),
             child: Center(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                width: 60.0,
-                height: 46.0,
-                decoration: BoxDecoration(
-                  color: selected ? theme.accent1 : Colors.transparent,
-                  borderRadius: BorderRadius.circular(999.0),
-                ),
-                child: Icon(
-                  icon,
-                  size: 26.0,
-                  color:
-                      color ?? (selected ? theme.primary : theme.primaryText),
-                ),
+              child: Icon(
+                icon,
+                size: 26.0,
+                color:
+                    color ?? (selected ? theme.primary : theme.secondaryText),
               ),
             ),
           ),

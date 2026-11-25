@@ -8,6 +8,7 @@ import '/components/button/button_widget.dart';
 import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/report_item/report_item_widget.dart';
 import '/components/training_mode_banner.dart';
+import '/core/utils/error_bottom_sheet.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -15,6 +16,7 @@ import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/push_service.dart';
+import '../../data/models/laporan_fields.dart';
 import '../../data/models/report_list_item.dart';
 import '../../data/repositories/dashboard_repository.dart';
 import '../../data/repositories/report_repository.dart';
@@ -40,7 +42,14 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   List<GetAllLocalReportsRow> _localReports = [];
   List<Map<String, dynamic>> _serverReports = [];
   DashboardSummary? _summary;
+
+  /// Reports waiting at each stage, keyed by `tahap`; missing while offline.
+  final Map<String, int> _tahapCounts = {};
   bool _isLoading = true;
+
+  /// Whether `laporan/saya` answered; otherwise Beranda falls back to the
+  /// local copies of synced reports.
+  bool _serverLoaded = false;
   bool _isSyncing = false;
 
   @override
@@ -84,15 +93,52 @@ class _DashboardWidgetState extends State<DashboardWidget> {
           scope: ReportListScope.mine,
         );
         _serverReports = result.reports;
+        _serverLoaded = result.errorMessage == null;
       } on ApiNetworkException {
         _serverReports = [];
+        _serverLoaded = false;
       }
       _summary = await DashboardRepository().fetchRingkasan(token: token);
+      await _loadTahapCounts(token);
       PushService.instance.refreshUnreadCount(token);
     }
 
     if (!mounted) return;
     setState(() => _isLoading = false);
+  }
+
+  static const _shortcutTahap = ['investigasi', 'verifikasi_dokter'];
+
+  /// Totals only (`per_page=1`), same scope as the list the shortcut opens.
+  Future<void> _loadTahapCounts(String token) async {
+    final results = await Future.wait(_shortcutTahap.map((tahap) async {
+      try {
+        final result = await ReportRepository().fetchReports(
+          page: 1,
+          perPage: 1,
+          token: token,
+          scope: ReportListScope.entitas,
+          tahap: tahap,
+        );
+        return result.errorMessage == null ? result.total : null;
+      } on ApiNetworkException {
+        return null;
+      }
+    }));
+    _tahapCounts.clear();
+    for (var i = 0; i < _shortcutTahap.length; i++) {
+      final count = results[i];
+      if (count != null) _tahapCounts[_shortcutTahap[i]] = count;
+    }
+  }
+
+  Future<void> _openTahapList(String tahap) async {
+    await context.pushNamed(
+      ReportHistoryWidget.routeName,
+      queryParameters:
+          {'tahap': serializeParam(tahap, ParamType.String)}.withoutNulls,
+    );
+    if (mounted) _load();
   }
 
   /// Queued reports only — drafts and legacy rows are never sent.
@@ -102,14 +148,28 @@ class _DashboardWidgetState extends State<DashboardWidget> {
 
   Future<void> _syncNow() async {
     setState(() => _isSyncing = true);
-    await SyncRepository().runSyncQueue();
+    final result = await SyncRepository().runSyncQueue();
     if (!mounted) return;
     setState(() => _isSyncing = false);
     await _load();
+    if (!mounted) return;
+    final message = result.summary(draftCount: 0);
+    if (result.hasProblem) {
+      showErrorBottomSheet(context, message,
+          title: 'Ada laporan yang belum terkirim',
+          icon: LucideIcons.cloudOff,
+          warning: result.rejected.isEmpty);
+    } else {
+      showSnackbar(context, message);
+    }
   }
 
-  List<ReportListItem> get _recentItems =>
-      ReportListItem.merge(_localReports, _serverReports).take(5).toList();
+  List<ReportListItem> get _recentItems => ReportListItem.merge(
+        _localReports,
+        _serverReports,
+        serverLoaded: _serverLoaded,
+        userId: (FFAppState().currentUser as Map?)?['id']?.toString(),
+      ).take(5).toList();
 
   (Color, Color) _statusColors(String status) {
     final theme = FlutterFlowTheme.of(context);
@@ -151,7 +211,8 @@ class _DashboardWidgetState extends State<DashboardWidget> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 20.0),
+                  padding:
+                      EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 20.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -162,26 +223,26 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                             'SehatSatli',
                             style: FlutterFlowTheme.of(context)
                                 .headlineSmall
-                              .override(
-                                font: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w800),
-                                color: FlutterFlowTheme.of(context).primary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        Text(
-                          'Wildlife Health Surveillance',
-                          style: FlutterFlowTheme.of(context)
-                              .labelSmall
-                              .override(
-                                  color: FlutterFlowTheme.of(context)
-                                      .secondaryText),
-                        ),
-                      ],
-                    ),
-                    _notificationBell(),
-                  ],
-                ),
+                                .override(
+                                  font: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w800),
+                                  color: FlutterFlowTheme.of(context).primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          Text(
+                            'Wildlife Health Surveillance',
+                            style: FlutterFlowTheme.of(context)
+                                .labelSmall
+                                .override(
+                                    color: FlutterFlowTheme.of(context)
+                                        .secondaryText),
+                          ),
+                        ],
+                      ),
+                      _notificationBell(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -230,11 +291,13 @@ class _DashboardWidgetState extends State<DashboardWidget> {
               borderRadius: 8.0,
               buttonSize: 44.0,
               fillColor: Colors.transparent,
-              icon: Icon(LucideIcons.bell, color: theme.primaryText, size: 26.0),
+              icon:
+                  Icon(LucideIcons.bell, color: theme.primaryText, size: 26.0),
               onPressed: () async {
                 await context.pushNamed(NotificationsWidget.routeName);
                 final token = FFAppState().accessToken;
-                if (token != null) PushService.instance.refreshUnreadCount(token);
+                if (token != null)
+                  PushService.instance.refreshUnreadCount(token);
               },
             ),
             if (unread > 0)
@@ -250,7 +313,8 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                     decoration: BoxDecoration(
                       color: theme.error,
                       borderRadius: BorderRadius.circular(999.0),
-                      border: Border.all(color: theme.secondaryBackground, width: 1.5),
+                      border: Border.all(
+                          color: theme.secondaryBackground, width: 1.5),
                     ),
                     child: Text(
                       unread > 99 ? '99+' : '$unread',
@@ -339,7 +403,8 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                         : theme.bodyMedium),
               ),
               Text('$total laporan',
-                  style: theme.bodyMedium.override(fontWeight: FontWeight.bold)),
+                  style:
+                      theme.bodyMedium.override(fontWeight: FontWeight.bold)),
             ],
           ),
         );
@@ -363,7 +428,8 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                   borderRadius: BorderRadius.circular(12.0),
                 ),
                 alignment: Alignment.center,
-                child: Icon(LucideIcons.barChart3, color: theme.info, size: 22.0),
+                child:
+                    Icon(LucideIcons.barChart3, color: theme.info, size: 22.0),
               ),
               SizedBox(width: 16.0),
               Text('Ringkasan Laporan',
@@ -383,23 +449,52 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   }
 
   Widget _quickActions() {
+    final theme = FlutterFlowTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Quick Actions',
-            style: FlutterFlowTheme.of(context).titleMedium.override(
+            style: theme.titleMedium.override(
                 font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
                 fontWeight: FontWeight.bold)),
         SizedBox(height: 16.0),
-        wrapWithModel(
-          model: _model.actionCardModel1,
-          updateCallback: () => safeSetState(() {}),
-          child: ActionCardWidget(
-            onTap: () => context.pushNamed(QuickReportWidget.routeName),
-            tone: FlutterFlowTheme.of(context).primary,
-            icon: Icon(LucideIcons.clipboardList,
-                color: FlutterFlowTheme.of(context).primaryText, size: 24.0),
-            title: 'Laporan Baru',
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ActionCardWidget(
+                  onTap: () async {
+                    await context.pushNamed(QuickReportWidget.routeName);
+                    if (mounted) _load();
+                  },
+                  icon: LucideIcons.squarePlus,
+                  iconColor: theme.primary,
+                  iconBackground: theme.accent1,
+                  title: 'Laporan Baru',
+                ),
+              ),
+              Expanded(
+                child: ActionCardWidget(
+                  onTap: () => _openTahapList('investigasi'),
+                  icon: LucideIcons.clipboardPen,
+                  iconColor: theme.secondary,
+                  iconBackground: theme.accent2,
+                  title: tahapPendingLabels['investigasi']!,
+                  count: _tahapCounts['investigasi'],
+                ),
+              ),
+              Expanded(
+                child: ActionCardWidget(
+                  onTap: () => _openTahapList('verifikasi_dokter'),
+                  icon: LucideIcons.stethoscope,
+                  iconColor: theme.info,
+                  iconBackground: theme.accent3,
+                  title: tahapPendingLabels['verifikasi_dokter']!,
+                  count: _tahapCounts['verifikasi_dokter'],
+                ),
+              ),
+            ].divide(SizedBox(width: 12.0)),
           ),
         ),
       ],
@@ -465,9 +560,11 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                   FullReportWidget.routeName,
                   queryParameters: {
                     if (item.clientId != null)
-                      'clientId': serializeParam(item.clientId, ParamType.String),
+                      'clientId':
+                          serializeParam(item.clientId, ParamType.String),
                     if (item.clientId == null)
-                      'reportId': serializeParam(item.serverId, ParamType.String),
+                      'reportId':
+                          serializeParam(item.serverId, ParamType.String),
                   }.withoutNulls,
                 ),
                 species: item.species,
@@ -483,4 +580,3 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     );
   }
 }
-

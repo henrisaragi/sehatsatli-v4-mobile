@@ -12,6 +12,7 @@ import 'package:sehat_satli/backend/sqlite/init.dart';
 import 'package:sehat_satli/backend/sqlite/sqlite_manager.dart';
 import 'package:sehat_satli/core/network/api_client.dart';
 import 'package:sehat_satli/data/repositories/report_repository.dart';
+import 'package:sehat_satli/data/repositories/sync_repository.dart';
 
 /// Offline-first laporan flow against backend v4 (CLAUDE.md §5.2): real
 /// SQLite schema via `sqflite_common_ffi`, fake `http.Client` for the server.
@@ -139,7 +140,8 @@ void main() {
     );
 
     expect(first.status, ReportSubmitStatus.failed);
-    expect(first.message, 'The selected spesies id is invalid.');
+    expect(first.message, 'Data jenis satwa ditolak server:\nJenis satwa: pilihan tidak valid');
+    expect((await SQLiteManager.instance.getLocalReport('c-rejected'))!.lastError, first.message);
     expect(requests, ['POST /api-v4/api/laporan']); // investigasi never sent
     expect((await localPayload('c-rejected'))['tahap_server'], isNull);
 
@@ -151,6 +153,52 @@ void main() {
     final row = await SQLiteManager.instance.getLocalReport('c-rejected');
     expect(row!.syncStatus, 'synced');
     expect(row.lastError, isNull);
+  });
+
+  test('a rejected stage can be corrected and resent in its queue slot', () async {
+    var rejectStage = true;
+    final sent = <Map<String, dynamic>>[];
+    final client = server((request) async {
+      if (request.url.path.endsWith('/api/laporan')) {
+        return json(201, {'id': 'uuid-fix', 'tahap': 'investigasi'});
+      }
+      sent.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return rejectStage
+          ? json(422, {
+              'message': 'The given data was invalid.',
+              'errors': {
+                'tanggal_kejadian': ['The tanggal kejadian field must be a date before or equal to today.'],
+              },
+            })
+          : json(200, {'id': 'uuid-fix', 'tahap': 'verifikasi_dokter'});
+    });
+    final repo = ReportRepository(apiClient: ApiClient(client: client));
+
+    final first = await repo.createWithInvestigasi(
+      clientId: 'c-fix',
+      createPayload: createPayload,
+      investigasi: investigasi,
+    );
+    expect(first.status, ReportSubmitStatus.failed);
+
+    final rejected = await repo.rejectedStage('c-fix');
+    expect(rejected!.tahap, 'investigasi');
+    expect(rejected.payload['kronologi'], investigasi['kronologi']);
+    expect(rejected.error, contains('Tanggal kejadian: tidak boleh setelah hari ini'));
+
+    rejectStage = false;
+    final corrected = {...investigasi, 'kronologi': 'Diperbaiki'};
+    final result = await repo.resubmitRejectedStage(
+      clientId: 'c-fix',
+      tahap: 'investigasi',
+      payload: corrected,
+    );
+
+    expect(result.status, ReportSubmitStatus.sent);
+    expect(sent.last['kronologi'], 'Diperbaiki');
+    expect(await repo.rejectedStage('c-fix'), isNull);
+    expect((await localPayload('c-fix'))['kronologi'], 'Diperbaiki');
+    expect(await SQLiteManager.instance.getPendingSyncQueue(), isEmpty);
   });
 
   test('network failure stops the drain and only bumps the attempted item', () async {
@@ -183,9 +231,36 @@ void main() {
     );
 
     expect(result.status, ReportSubmitStatus.queuedOffline);
+    // Says why, instead of Laravel's bare message.
+    expect(result.message, startsWith('Server sedang bermasalah (HTTP 503).'));
+    expect((await SQLiteManager.instance.getLocalReport('c-503'))!.lastError, result.message);
     final queue = await SQLiteManager.instance.getPendingSyncQueue();
     expect(queue, hasLength(2));
     expect(queue.first.retryCount, 1);
+  });
+
+  test('unreachable server: report stays pending and records why', () async {
+    final client = MockClient((_) async => throw const SocketException('no route'));
+    final result = await ReportRepository(apiClient: ApiClient(client: client))
+        .createWithInvestigasi(
+      clientId: 'c-offline',
+      createPayload: createPayload,
+      investigasi: investigasi,
+    );
+
+    expect(result.status, ReportSubmitStatus.queuedOffline);
+    expect(result.message, contains('Periksa koneksi internet'));
+    final local = await SQLiteManager.instance.getLocalReport('c-offline');
+    expect(local!.syncStatus, 'pending');
+    expect(local.lastError, result.message);
+  });
+
+  test('sync summary counts drafts separately from the queue', () async {
+    final result = await SyncRepository().runSyncQueue(); // nothing queued
+    final summary = result.summary(draftCount: 2);
+    expect(summary, contains('Tidak ada laporan di antrean kirim.'));
+    expect(summary, contains('2 laporan masih Draf'));
+    expect(result.hasProblem, isFalse);
   });
 
   test('photo: sign-upload, raw PUT to object storage, then register', () async {

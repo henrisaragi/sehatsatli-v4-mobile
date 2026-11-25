@@ -121,7 +121,9 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: ReportHistoryWidget.routeName,
           path: ReportHistoryWidget.routePath,
-          builder: (context, params) => ReportHistoryWidget(),
+          builder: (context, params) => ReportHistoryWidget(
+            tahap: params.getParam('tahap', ParamType.String),
+          ),
         ),
         FFRoute(
           name: SplashAuthWidget.routeName,

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
 
-import '../../app_state.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
@@ -16,17 +15,47 @@ class ReportSubmitResult {
   ReportSubmitResult({required this.status, this.message});
 
   final ReportSubmitStatus status;
+
+  /// [ReportSubmitStatus.failed]: what the server rejected.
+  /// [ReportSubmitStatus.queuedOffline]: why it couldn't be sent yet.
   final String? message;
+
+  /// One line for the user: outcome plus what to do next.
+  String get userMessage => switch (status) {
+        ReportSubmitStatus.sent => 'Terkirim ke server.',
+        ReportSubmitStatus.queuedOffline => message ??
+            'Tersimpan di perangkat — dikirim otomatis saat online.',
+        ReportSubmitStatus.failed => '${message ?? 'Server menolak laporan.'}\n\n'
+            'Periksa data di atas, lalu tekan "Kirim ulang".',
+      };
+}
+
+/// A stage the server rejected, with the data that was sent, so the user
+/// can correct it.
+class RejectedStage {
+  RejectedStage({required this.tahap, required this.payload, required this.error});
+
+  final String tahap;
+  final Map<String, dynamic> payload;
+  final String error;
 }
 
 /// Which server report list to fetch.
 enum ReportListScope { mine, entitas }
 
 class ReportListResult {
-  ReportListResult({required this.reports, required this.hasMore, this.errorMessage});
+  ReportListResult({
+    required this.reports,
+    required this.hasMore,
+    this.total = 0,
+    this.errorMessage,
+  });
 
   final List<Map<String, dynamic>> reports;
   final bool hasMore;
+
+  /// Total matching reports across all pages.
+  final int total;
   final String? errorMessage;
 }
 
@@ -83,7 +112,8 @@ class ReportRepository {
       'foto_lokal': photoPaths,
     });
     await _enqueue(clientId, ApiEndpoints.laporan, 'POST', create);
-    await _enqueue(clientId, ApiEndpoints.laporanInvestigasi, 'PUT', investigasi);
+    await _enqueue(
+        clientId, ApiEndpoints.laporanInvestigasi, 'PUT', investigasi);
     await _enqueuePhotos(clientId, photoPaths);
     return _drain(clientId);
   }
@@ -98,7 +128,8 @@ class ReportRepository {
     List<String> photoPaths = const [],
   }) async {
     final local = await SQLiteManager.instance.getLocalReport(clientId);
-    final current = jsonDecode(local?.payloadJson ?? '{}') as Map<String, dynamic>;
+    final current =
+        jsonDecode(local?.payloadJson ?? '{}') as Map<String, dynamic>;
     await _writeLocal(clientId, {
       ...current,
       ...display,
@@ -113,8 +144,55 @@ class ReportRepository {
 
   /// Puts the report's rejected queue items back in line and resends.
   Future<ReportSubmitResult> retry(String clientId) async {
-    await _syncRepository.retryFailed(clientId);
-    return _statusOf(clientId);
+    final run = await _syncRepository.retryFailed(clientId);
+    return _statusOf(clientId, run);
+  }
+
+  /// The stage form the server rejected for [clientId], or null when nothing
+  /// is rejected or what was rejected isn't a stage (the create or a photo).
+  Future<RejectedStage?> rejectedStage(String clientId) async {
+    if (kIsWeb) return null;
+    final item = await SQLiteManager.instance.getFailedSyncItem(clientId);
+    if (item == null) return null;
+    final tahap = stageEndpoints.entries
+        .where((e) => e.value == item.endpoint)
+        .map((e) => e.key)
+        .firstOrNull;
+    if (tahap == null) return null;
+    return RejectedStage(
+      tahap: tahap,
+      payload: jsonDecode(item.payloadJson) as Map<String, dynamic>,
+      error: item.lastError ?? 'Ditolak server.',
+    );
+  }
+
+  /// Sends corrected data for the rejected stage [tahap]: the rejected job
+  /// gets the new request in its own queue slot (so stages still reach the
+  /// server in order), the local snapshot shows the corrected values, and
+  /// the queue is drained.
+  Future<ReportSubmitResult> resubmitRejectedStage({
+    required String clientId,
+    required String tahap,
+    required Map<String, dynamic> payload,
+    Map<String, dynamic> display = const {},
+    List<String> photoPaths = const [],
+  }) async {
+    final item = await SQLiteManager.instance.getFailedSyncItem(clientId);
+    if (item == null || item.endpoint != stageEndpoints[tahap]) {
+      // Nothing rejected any more (e.g. retried meanwhile) — just resend.
+      return retry(clientId);
+    }
+    final local = await SQLiteManager.instance.getLocalReport(clientId);
+    final current = jsonDecode(local?.payloadJson ?? '{}') as Map<String, dynamic>;
+    await SQLiteManager.instance.replaceSyncItemPayload(item.id, jsonEncode(payload));
+    await _writeLocal(clientId, {
+      ...current,
+      ...display,
+      ...payload,
+      'foto_lokal': [...?(current['foto_lokal'] as List?), ...photoPaths],
+    });
+    await _enqueuePhotos(clientId, photoPaths);
+    return _drain(clientId);
   }
 
   /// Removes a report that only exists on this device. Backend v4 has no
@@ -130,7 +208,8 @@ class ReportRepository {
     final serverId = remote['id'].toString();
     for (final row in await SQLiteManager.instance.getAllLocalReports()) {
       if (row.serverId == serverId) {
-        final local = jsonDecode(row.payloadJson ?? '{}') as Map<String, dynamic>;
+        final local =
+            jsonDecode(row.payloadJson ?? '{}') as Map<String, dynamic>;
         // Stages still waiting in the queue are newer than the server copy.
         final merged = row.syncStatus == 'synced'
             ? {...local, ...remote, 'foto_lokal': local['foto_lokal']}
@@ -161,6 +240,8 @@ class ReportRepository {
     required int page,
     required String token,
     required ReportListScope scope,
+    String? tahap,
+    int perPage = 25,
   }) async {
     final response = await _apiClient.request(
       'GET',
@@ -168,20 +249,29 @@ class ReportRepository {
         ReportListScope.mine => ApiEndpoints.laporanSaya,
         ReportListScope.entitas => ApiEndpoints.laporanEntitas,
       },
-      query: {'page': page, 'per_page': 25},
+      query: {
+        'page': page,
+        'per_page': perPage,
+        if (tahap != null) 'tahap': tahap
+      },
       token: token,
     );
     if (!response.isSuccess) {
-      return ReportListResult(reports: [], hasMore: false, errorMessage: response.message);
+      return ReportListResult(
+          reports: [], hasMore: false, errorMessage: response.message);
     }
     final items = response.body['data'];
     final currentPage = response.body['current_page'] as int? ?? page;
     final lastPage = response.body['last_page'] as int? ?? currentPage;
     return ReportListResult(
       reports: items is List
-          ? items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          ? items
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
           : [],
       hasMore: currentPage < lastPage,
+      total: (response.body['total'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -199,7 +289,8 @@ class ReportRepository {
     return response.isSuccess ? response.body : null;
   }
 
-  Future<void> _writeLocal(String clientId, Map<String, dynamic> payload) async {
+  Future<void> _writeLocal(
+      String clientId, Map<String, dynamic> payload) async {
     if (kIsWeb) return;
     await SQLiteManager.instance.upsertLocalReport(
       clientId: clientId,
@@ -225,7 +316,8 @@ class ReportRepository {
 
   Future<void> _enqueuePhotos(String clientId, List<String> paths) async {
     for (final path in paths) {
-      await _enqueue(clientId, ApiEndpoints.laporanFoto, syncMethodUploadPhoto, {
+      await _enqueue(
+          clientId, ApiEndpoints.laporanFoto, syncMethodUploadPhoto, {
         'local_path': path,
         'content_type': 'image/jpeg',
       });
@@ -233,13 +325,10 @@ class ReportRepository {
   }
 
   Future<ReportSubmitResult> _drain(String clientId) async {
-    if (FFAppState().accessToken != null) {
-      await _syncRepository.runSyncQueue();
-    }
-    return _statusOf(clientId);
+    return _statusOf(clientId, await _syncRepository.runSyncQueue());
   }
 
-  Future<ReportSubmitResult> _statusOf(String clientId) async {
+  Future<ReportSubmitResult> _statusOf(String clientId, SyncRunResult run) async {
     final local = await SQLiteManager.instance.getLocalReport(clientId);
     switch (local?.syncStatus) {
       case 'synced':
@@ -250,7 +339,10 @@ class ReportRepository {
           message: local?.lastError,
         );
       default:
-        return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
+        return ReportSubmitResult(
+          status: ReportSubmitStatus.queuedOffline,
+          message: run.stopMessage,
+        );
     }
   }
 }

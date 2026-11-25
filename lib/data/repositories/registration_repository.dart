@@ -1,5 +1,6 @@
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/api_error_text.dart';
 
 /// Result of `POST /api/registrasi/upt` (docs-new-versions/register-upt.md).
 class RegistrationSubmitResult {
@@ -55,7 +56,8 @@ class RegistrationRepository {
     required String nip,
     required String jabatan,
   }) async {
-    final response = await _apiClient.post(
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.registrasiUpt,
       body: {
         'nama': nama,
@@ -69,24 +71,23 @@ class RegistrationRepository {
       },
     );
 
-    if (response['user_id'] != null) {
+    if (response.isSuccess && response.body['user_id'] != null) {
       return RegistrationSubmitResult(success: true);
     }
 
-    final errors = response['errors'];
+    final errors = response.body['errors'];
     final fieldErrors = <String, String>{};
-    if (errors is Map) {
+    if (response.statusCode == 422 && errors is Map) {
       for (final entry in errors.entries) {
         final value = entry.value;
-        fieldErrors[entry.key.toString()] =
-            value is List ? value.first.toString() : value.toString();
+        fieldErrors[entry.key.toString()] = translateValidation(
+            value is List ? value.first.toString() : value.toString());
       }
     }
 
-    final message = response['message'];
     return RegistrationSubmitResult(
       success: false,
-      message: message is String ? message : 'Registrasi gagal.',
+      message: response.message,
       fieldErrors: fieldErrors,
     );
   }

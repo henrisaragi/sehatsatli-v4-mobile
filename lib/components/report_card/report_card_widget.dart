@@ -15,6 +15,7 @@ class ReportCardWidget extends StatelessWidget {
     required this.syncStatus,
     required this.date,
     required this.reportCode,
+    this.footer,
   });
 
   final VoidCallback? onTap;
@@ -28,6 +29,9 @@ class ReportCardWidget extends StatelessWidget {
   final String syncStatus;
   final String date;
   final String reportCode;
+
+  /// Extra content under the row, e.g. a sync error with a retry button.
+  final Widget? footer;
 
   (Color, Color) _badgeColors(FlutterFlowTheme theme) {
     switch (syncStatus) {
@@ -66,84 +70,93 @@ class ReportCardWidget extends StatelessWidget {
             borderRadius: BorderRadius.circular(12.0),
             border: Border.all(color: theme.alternate),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 44.0,
-                height: 44.0,
-                decoration: BoxDecoration(
-                  color: theme.primary10,
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                alignment: Alignment.center,
-                child: icon,
-              ),
-              const SizedBox(width: 12.0),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                children: [
+                  Container(
+                    width: 44.0,
+                    height: 44.0,
+                    decoration: BoxDecoration(
+                      color: theme.primary10,
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                    alignment: Alignment.center,
+                    child: icon,
+                  ),
+                  const SizedBox(width: 12.0),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            species,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.titleSmall.override(
-                              font: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600),
-                              color: theme.primaryText,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.w600,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                species,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.titleSmall.override(
+                                  font: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600),
+                                  color: theme.primaryText,
+                                  letterSpacing: 0.0,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8.0),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10.0, vertical: 3.0),
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                borderRadius: BorderRadius.circular(999.0),
+                              ),
+                              child: Text(
+                                status,
+                                style: theme.labelSmall.override(
+                                  font: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600),
+                                  color: badgeFg,
+                                  letterSpacing: 0.0,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8.0),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10.0, vertical: 3.0),
-                          decoration: BoxDecoration(
-                            color: badgeBg,
-                            borderRadius: BorderRadius.circular(999.0),
-                          ),
-                          child: Text(
-                            status,
-                            style: theme.labelSmall.override(
-                              font: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600),
-                              color: badgeFg,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.w600,
+                        const SizedBox(height: 6.0),
+                        Row(
+                          children: [
+                            Icon(LucideIcons.calendar,
+                                size: 14.0, color: theme.secondaryText),
+                            const SizedBox(width: 4.0),
+                            Text(date, style: metaStyle),
+                            const SizedBox(width: 12.0),
+                            Icon(LucideIcons.fileText,
+                                size: 14.0, color: theme.secondaryText),
+                            const SizedBox(width: 4.0),
+                            Expanded(
+                              child: Text(
+                                reportCode,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: metaStyle,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6.0),
-                    Row(
-                      children: [
-                        Icon(LucideIcons.calendar,
-                            size: 14.0, color: theme.secondaryText),
-                        const SizedBox(width: 4.0),
-                        Text(date, style: metaStyle),
-                        const SizedBox(width: 12.0),
-                        Icon(LucideIcons.fileText,
-                            size: 14.0, color: theme.secondaryText),
-                        const SizedBox(width: 4.0),
-                        Expanded(
-                          child: Text(
-                            reportCode,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: metaStyle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+              if (footer != null) ...[
+                const SizedBox(height: 12.0),
+                footer!,
+              ],
             ],
           ),
         ),

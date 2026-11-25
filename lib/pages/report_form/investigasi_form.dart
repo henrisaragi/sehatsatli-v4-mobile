@@ -28,15 +28,19 @@ class InvestigasiFormData {
   double? longitude;
   List<String> photoPaths = [];
 
-  bool get isValid =>
-      tanggalKejadian != null &&
-      (int.tryParse(jumlahSakit) ?? -1) >= 0 &&
-      (jumlahMati.isEmpty || (int.tryParse(jumlahMati) ?? -1) >= 0) &&
-      kronologi.trim().isNotEmpty &&
-      tindakLanjut.trim().isNotEmpty &&
-      kesimpulanAwal != null &&
-      latitude != null &&
-      longitude != null;
+  /// What still blocks submitting, worded for the user.
+  List<String> get missingFields => [
+        if (tanggalKejadian == null) 'Tanggal kejadian',
+        if ((int.tryParse(jumlahSakit) ?? -1) < 0) 'Jumlah sakit (angka 0 atau lebih)',
+        if (jumlahMati.isNotEmpty && (int.tryParse(jumlahMati) ?? -1) < 0)
+          'Jumlah mati (angka 0 atau lebih)',
+        if (kronologi.trim().isEmpty) 'Kronologi',
+        if (tindakLanjut.trim().isEmpty) 'Tindak lanjut',
+        if (kesimpulanAwal == null) 'Kesimpulan awal',
+        if (latitude == null || longitude == null) 'Lokasi GPS (latitude & longitude)',
+      ];
+
+  bool get isValid => missingFields.isEmpty;
 
   Map<String, dynamic> toPayload() => {
         'tanggal_kejadian': dateTimeFormat('yyyy-MM-dd', tanggalKejadian!),

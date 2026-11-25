@@ -10,6 +10,7 @@ import '/data/repositories/registration_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import '/core/network/api_error_text.dart';
 
 final RegExp _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 final RegExp _nipRegex = RegExp(r'^\d{18}$');
@@ -77,6 +78,7 @@ class _RegisterUptWidgetState extends State<RegisterUptWidget> {
         _uptOptions = const [];
         _loadingUpt = false;
       });
+      showSnackbar(context, 'Daftar UPT gagal dimuat. $networkErrorText');
     }
   }
 
@@ -105,6 +107,7 @@ class _RegisterUptWidgetState extends State<RegisterUptWidget> {
         _unitOptions = const [];
         _loadingUnit = false;
       });
+      showSnackbar(context, 'Daftar unit organisasi gagal dimuat. $networkErrorText');
     }
   }
 
@@ -201,12 +204,12 @@ class _RegisterUptWidgetState extends State<RegisterUptWidget> {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       showErrorBottomSheet(
-          context, 'Terlalu banyak percobaan, coba lagi nanti.');
+          context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+          networkErrorText);
     }
   }
 

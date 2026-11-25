@@ -43,7 +43,13 @@ Future<void> performUpsertLocalReport(
       'report_code': reportCode ?? previous['report_code'],
       'payload_json': payloadJson,
       'sync_status': syncStatus,
-      'last_error': syncStatus == 'failed' ? (lastError ?? previous['last_error']) : null,
+      // `failed` keeps its rejection until retried; `pending` may carry why
+      // the last attempt didn't go through (offline, server down).
+      'last_error': switch (syncStatus) {
+        'failed' => lastError ?? previous['last_error'],
+        'pending' => lastError,
+        _ => null,
+      },
       'retry_count': 0,
       'created_at': previous['created_at'] ?? now,
       'updated_at': now,
@@ -117,4 +123,23 @@ Future<void> performResetFailedSyncItems(Database database, String clientId) =>
       {'status': 'pending'},
       where: "client_id = ? AND status = 'failed'",
       whereArgs: [clientId],
+    );
+
+/// Replaces a rejected job's request with corrected data and puts it back
+/// in line, keeping its place in the queue.
+Future<void> performReplaceSyncItemPayload(
+  Database database, {
+  required int id,
+  required String payloadJson,
+}) =>
+    database.update(
+      'sync_queue',
+      {
+        'payload_json': payloadJson,
+        'status': 'pending',
+        'retry_count': 0,
+        'last_error': null,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
     );

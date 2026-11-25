@@ -13,6 +13,7 @@ import '/data/repositories/master_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import '/core/network/api_error_text.dart';
 
 /// Step 2 of the v4 login flow (docs-new-versions/login.md) — OTP entry,
 /// reached from `SplashAuthWidget` after `AuthRepository.requestLoginOtp`
@@ -122,12 +123,12 @@ class _OtpLoginWidgetState extends State<OtpLoginWidget> {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       showErrorBottomSheet(
-          context, 'Terlalu banyak percobaan, coba lagi nanti.');
+          context, rateLimitText);
     } on ApiNetworkException {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       showErrorBottomSheet(context,
-          'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+          networkErrorText);
     }
   }
 

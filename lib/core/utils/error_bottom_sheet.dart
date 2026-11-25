@@ -6,7 +6,13 @@ import '/flutter_flow/flutter_flow_theme.dart';
 /// Server/network error surface shared across forms that need more room
 /// than a snackbar (docs/update-profile.md's edit-profile checklist calls
 /// for endpoint/server errors to show via a bottom sheet specifically).
-Future<void> showErrorBottomSheet(BuildContext context, String message) {
+Future<void> showErrorBottomSheet(
+  BuildContext context,
+  String message, {
+  String title = 'Terjadi Kesalahan',
+  IconData icon = LucideIcons.circleAlert,
+  bool warning = false,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
@@ -19,11 +25,15 @@ Future<void> showErrorBottomSheet(BuildContext context, String message) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.circleAlert,
-                color: FlutterFlowTheme.of(context).error, size: 40.0),
+            Icon(icon,
+                color: warning
+                    ? FlutterFlowTheme.of(context).warning
+                    : FlutterFlowTheme.of(context).error,
+                size: 40.0),
             SizedBox(height: 12.0),
             Text(
-              'Terjadi Kesalahan',
+              title,
+              textAlign: TextAlign.center,
               style: FlutterFlowTheme.of(context)
                   .titleMedium
                   .override(fontWeight: FontWeight.bold),

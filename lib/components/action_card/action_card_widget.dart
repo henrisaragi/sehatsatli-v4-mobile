@@ -1,120 +1,100 @@
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-import 'action_card_model.dart';
-export 'action_card_model.dart';
 
-class ActionCardWidget extends StatefulWidget {
+import '/flutter_flow/flutter_flow_theme.dart';
+
+/// Dashboard quick-action tile: tinted icon, title, and an optional count
+/// pill (e.g. reports waiting at a stage).
+class ActionCardWidget extends StatelessWidget {
   const ActionCardWidget({
     super.key,
-    Color? tone,
-    this.icon,
-    String? title,
+    required this.icon,
+    required this.iconColor,
+    required this.iconBackground,
+    required this.title,
+    this.count,
     this.onTap,
-  })  : this.tone = tone ?? const Color(0x00000000),
-        this.title = title ?? 'General Report';
+  });
 
-  final Color tone;
-  final Widget? icon;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackground;
   final String title;
 
-  /// Was a dead `tapAction` string param before (never read in build()) —
-  /// see memory `feedback-flutterflow-dead-params`. Only call site is
-  /// dashboard_widget.dart, so replaced outright rather than kept alongside.
+  /// Shown top-right when non-null; hidden while unknown (offline/loading).
+  final int? count;
   final VoidCallback? onTap;
 
   @override
-  State<ActionCardWidget> createState() => _ActionCardWidgetState();
-}
-
-class _ActionCardWidgetState extends State<ActionCardWidget> {
-  late ActionCardModel _model;
-
-  @override
-  void setState(VoidCallback callback) {
-    super.setState(callback);
-    _model.onUpdate();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _model = createModel(context, () => ActionCardModel());
-  }
-
-  @override
-  void dispose() {
-    _model.maybeDispose();
-
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: widget!.onTap,
+    final theme = FlutterFlowTheme.of(context);
+    final count = this.count;
+
+    return Material(
+      color: theme.secondaryBackground,
       borderRadius: BorderRadius.circular(12.0),
-      child: Container(
-      decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12.0),
-        shape: BoxShape.rectangle,
-        border: Border.all(
-          color: FlutterFlowTheme.of(context).alternate,
-          width: 1.0,
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(24.0),
         child: Container(
+          padding: const EdgeInsets.all(14.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(color: theme.alternate),
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44.0,
-                height: 44.0,
-                decoration: BoxDecoration(
-                  color: valueOrDefault<Color>(
-                    widget!.tone,
-                    FlutterFlowTheme.of(context).primary,
-                  ),
-                  borderRadius: BorderRadius.circular(12.0),
-                  shape: BoxShape.rectangle,
-                ),
-                child: widget!.icon!,
-              ),
-              Text(
-                valueOrDefault<String>(
-                  widget!.title,
-                  'General Report',
-                ),
-                maxLines: 2,
-                style: FlutterFlowTheme.of(context).labelLarge.override(
-                      font: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        fontStyle:
-                            FlutterFlowTheme.of(context).labelLarge.fontStyle,
-                      ),
-                      color: FlutterFlowTheme.of(context).primaryText,
-                      letterSpacing: 0.0,
-                      fontWeight: FontWeight.w600,
-                      fontStyle:
-                          FlutterFlowTheme.of(context).labelLarge.fontStyle,
-                      lineHeight: 1.33,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40.0,
+                    height: 40.0,
+                    decoration: BoxDecoration(
+                      color: iconBackground,
+                      borderRadius: BorderRadius.circular(10.0),
                     ),
-                overflow: TextOverflow.ellipsis,
+                    alignment: Alignment.center,
+                    child: Icon(icon, color: iconColor, size: 22.0),
+                  ),
+                  const Spacer(),
+                  if (count != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0, vertical: 2.0),
+                      decoration: BoxDecoration(
+                        color: count > 0 ? iconColor : theme.alternate,
+                        borderRadius: BorderRadius.circular(999.0),
+                      ),
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: theme.labelSmall.override(
+                          font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                          color: count > 0 ? Colors.white : theme.secondaryText,
+                          letterSpacing: 0.0,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ].divide(SizedBox(height: 8.0)),
+              const SizedBox(height: 12.0),
+              Text(
+                title,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.labelLarge.override(
+                  font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                  color: theme.primaryText,
+                  letterSpacing: 0.0,
+                  fontWeight: FontWeight.w600,
+                  lineHeight: 1.3,
+                ),
+              ),
+            ],
           ),
         ),
-      ),
       ),
     );
   }

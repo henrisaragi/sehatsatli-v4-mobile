@@ -9,11 +9,13 @@ import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/report_card/report_card_widget.dart';
 import '/components/text_field/text_field_widget.dart';
 import '/components/training_mode_banner.dart';
+import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/network/api_client.dart';
+import '../../data/models/laporan_fields.dart';
 import '../../data/models/report_list_item.dart';
 import '../../data/repositories/master_repository.dart';
 import '../../data/repositories/report_repository.dart';
@@ -21,7 +23,11 @@ import 'report_history_model.dart';
 export 'report_history_model.dart';
 
 class ReportHistoryWidget extends StatefulWidget {
-  const ReportHistoryWidget({super.key});
+  const ReportHistoryWidget({super.key, this.tahap});
+
+  /// When set, lists only server reports waiting at this stage (opened from
+  /// a dashboard shortcut): back button instead of tabs and bottom nav.
+  final String? tahap;
 
   static String routeName = 'ReportHistory';
   static String routePath = '/reportHistory';
@@ -115,6 +121,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
         page: page,
         token: token,
         scope: ReportListScope.entitas,
+        tahap: widget.tahap,
       );
       if (!mounted) return;
       setState(() {
@@ -263,6 +270,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final tahap = widget.tahap;
     final items = _visibleItems;
     final showLoadMore = !_showUnsent && _hasMore;
 
@@ -289,10 +297,24 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          if (tahap != null) ...[
+                            FlutterFlowIconButton(
+                              borderRadius: 8.0,
+                              buttonSize: 40.0,
+                              icon: Icon(LucideIcons.arrowLeft,
+                                  color:
+                                      FlutterFlowTheme.of(context).primaryText),
+                              onPressed: () => context.safePop(),
+                            ),
+                            SizedBox(width: 4.0),
+                          ],
                           Text(
-                            'Laporan Kasus',
+                            tahap == null
+                                ? 'Laporan Kasus'
+                                : (tahapPendingLabels[tahap] ??
+                                    tahapLabels[tahap] ??
+                                    'Laporan Kasus'),
                             style: FlutterFlowTheme.of(context)
                                 .headlineSmall
                                 .override(
@@ -324,20 +346,31 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                 ),
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: FlutterFlowTheme.of(context).secondaryBackground,
-                border: Border(
-                    bottom: BorderSide(
-                        color: FlutterFlowTheme.of(context).alternate)),
+            if (tahap == null)
+              Container(
+                decoration: BoxDecoration(
+                  color: FlutterFlowTheme.of(context).secondaryBackground,
+                  border: Border(
+                      bottom: BorderSide(
+                          color: FlutterFlowTheme.of(context).alternate)),
+                ),
+                child: Row(
+                  children: [
+                    _tab('Laporan', false),
+                    _tab('Belum Terkirim', true, count: _localReports.length),
+                  ],
+                ),
+              )
+            else
+              Container(
+                height: 12.0,
+                decoration: BoxDecoration(
+                  color: FlutterFlowTheme.of(context).secondaryBackground,
+                  border: Border(
+                      bottom: BorderSide(
+                          color: FlutterFlowTheme.of(context).alternate)),
+                ),
               ),
-              child: Row(
-                children: [
-                  _tab('Laporan', false),
-                  _tab('Belum Terkirim', true, count: _localReports.length),
-                ],
-              ),
-            ),
             TrainingModeBanner(),
             Expanded(
               child: _isLoadingFirstPage && !_showUnsent
@@ -347,6 +380,7 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                       child: items.isEmpty
                           ? ListView(
                               physics: AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.zero,
                               children: [
                                 SizedBox(height: 96.0),
                                 Icon(LucideIcons.package,
@@ -359,7 +393,9 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                     _showUnsent
                                         ? 'Semua laporan sudah terkirim'
                                         : (_errorMessage ??
-                                            'Belum ada laporan'),
+                                            (tahap != null
+                                                ? 'Tidak ada laporan di tahap ini'
+                                                : 'Belum ada laporan')),
                                     textAlign: TextAlign.center,
                                     style: FlutterFlowTheme.of(context)
                                         .bodyMedium
@@ -432,10 +468,12 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
             ),
           ],
         ),
-        bottomNavigationBar: MainBottomNavWidget(
-          currentTab: MainTab.laporan,
-          onQuickReportClosed: _loadFirstPage,
-        ),
+        bottomNavigationBar: tahap != null
+            ? null
+            : MainBottomNavWidget(
+                currentTab: MainTab.laporan,
+                onQuickReportClosed: _loadFirstPage,
+              ),
       ),
     );
   }
