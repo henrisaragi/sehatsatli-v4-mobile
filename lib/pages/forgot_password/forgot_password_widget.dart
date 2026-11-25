@@ -31,6 +31,7 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
   int _step = 1;
   String _email = '';
   String _otp = '';
+  String? _resetToken;
   String _password = '';
   String _confirmPassword = '';
   bool _isSubmitting = false;
@@ -61,6 +62,7 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
       setState(() {
         _isSubmitting = false;
         _email = email;
+        _resetToken = result.resetToken;
         _step = 2;
       });
     } on ApiNetworkException {
@@ -84,12 +86,14 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
     });
 
     try {
-      final result = await AuthRepository().verifyPasswordOtp(_email, otp);
+      final result = await AuthRepository().verifyPasswordOtp(_resetToken!, otp);
       if (!mounted) return;
       if (!result.success) {
         setState(() {
           _isSubmitting = false;
           _error = result.message ?? 'Kode OTP salah atau sudah kedaluwarsa';
+          // Expired or out of attempts — the token is dead; start over.
+          if (result.tokenInvalid) _step = 1;
         });
         return;
       }
@@ -116,6 +120,7 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
         setState(() => _error = result.message ?? 'Gagal mengirim ulang OTP');
         return;
       }
+      _resetToken = result.resetToken;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kode OTP telah dikirim ulang')),
       );
@@ -127,8 +132,8 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
   }
 
   Future<void> _resetPassword() async {
-    if (_password.length < 6) {
-      setState(() => _error = 'Password minimal 6 karakter');
+    if (_password.length < 8) {
+      setState(() => _error = 'Password minimal 8 karakter');
       return;
     }
     if (_password != _confirmPassword) {
@@ -143,8 +148,7 @@ class _ForgotPasswordWidgetState extends State<ForgotPasswordWidget> {
 
     try {
       final result = await AuthRepository().resetPasswordWithOtp(
-        _email,
-        _otp,
+        _resetToken!,
         _password,
         _confirmPassword,
       );

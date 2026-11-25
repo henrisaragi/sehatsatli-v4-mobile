@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_response_helper.dart';
 
+/// Read-only master data (species, diseases) cached in `master_cache` so the
+/// report forms work with zero signal (CLAUDE.md §10.3).
 class MasterRepository {
   MasterRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
@@ -15,114 +16,61 @@ class MasterRepository {
   static const Duration _cacheTtl = Duration(hours: 24);
 
   static const Map<String, String> _endpointsByCacheKey = {
-    'masters': ApiEndpoints.masters,
-    'location_user': ApiEndpoints.locationUser,
-    'diseases': ApiEndpoints.diseasesGetAll,
-    'species': ApiEndpoints.speciesGetAll,
-    'upts': ApiEndpoints.uptsGetAll,
+    'spesies': ApiEndpoints.spesies,
+    'penyakit': ApiEndpoints.penyakit,
   };
 
-  /// Fetches every master dataset and writes it to `master_cache`, skipping
-  /// any key whose cache is still within TTL unless [force] is set.
-  ///
-  /// Safe to call fire-and-forget — network/parse failures are swallowed so
-  /// the app just keeps using whatever's already cached (offline-first: a
-  /// failed refresh must never block the caller or wipe existing data).
+  /// Downloads every page of each master list into `master_cache`, skipping
+  /// lists still within TTL unless [force] is set. Safe fire-and-forget: a
+  /// failed refresh keeps whatever was cached before.
   Future<void> refreshAll({required String token, bool force = false}) async {
     for (final entry in _endpointsByCacheKey.entries) {
       try {
         if (!force && await _isFresh(entry.key)) continue;
-        final response = await _apiClient.post(entry.value, token: token);
-        if (!isApiSuccess(response)) continue;
-        final data = response['data'] ?? response;
-        await _writeCache(entry.key, jsonEncode(data));
+        final rows = await _fetchAllPages(entry.value, token);
+        if (rows != null) await _writeCache(entry.key, jsonEncode(rows));
       } catch (_) {
         // Leave whatever's already cached untouched.
       }
     }
   }
 
-  /// The live `masters` response wraps every option group inside
-  /// `data.options.*` (e.g. `{options: {upt_type: [...], case_types: [...]},
-  /// trained: ...}`), not flat at the top level — confirmed against
-  /// production, see revisi.md bug note #1. [refreshAll] caches the raw
-  /// response as-is; unwrap it here, once, so every consumer (existing and
-  /// future) gets the option lists directly without needing to know about
-  /// the wrapping.
-  Future<dynamic> getCachedMasters() async {
-    final cached = await _readCached('masters');
-    if (cached is Map && cached['options'] is Map) {
-      return cached['options'];
-    }
-    return cached;
-  }
-  Future<dynamic> getCachedLocationUser() => _readCached('location_user');
-  Future<dynamic> getCachedDiseases() => _readCached('diseases');
-  Future<dynamic> getCachedSpecies() => _readCached('species');
-  Future<dynamic> getCachedUpts() => _readCached('upts');
+  /// Species: `{id, scientific_name, local_name, status_perlindungan,
+  /// family: {nama_ilmiah}, taksa: {nama}}`.
+  Future<List<Map<String, dynamic>>> getCachedSpesies() => _readCached('spesies');
 
-  /// Reads the locally-cached `species/getAll` list (already fetched &
-  /// persisted to `master_cache` by [refreshAll], per CLAUDE.md §10.3 —
-  /// dropdowns must read from local DB, not fire a fresh network call) and
-  /// filters it down to `protected == true` (design-system.md §4: `Species`
-  /// has a `protected` bool column). Used to populate the "Satwa Dilindungi"
-  /// picker in the report form's Spesies step.
-  Future<List<Map<String, dynamic>>> getCachedProtectedSpecies() async {
-    final all = _asMapList(await getCachedSpecies());
-    return all.where((s) => _isTruthy(s['protected'])).toList();
-  }
+  /// Diseases: `{id, nama, prioritas, zoonosis, alert}`.
+  Future<List<Map<String, dynamic>>> getCachedPenyakit() => _readCached('penyakit');
 
-  static List<Map<String, dynamic>> _asMapList(dynamic data) {
-    if (data is List) {
-      return data
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    if (data is Map) {
-      for (final key in const ['species', 'data']) {
-        final v = data[key];
-        if (v is List) {
-          return v
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-        }
+  Future<List<Map<String, dynamic>>?> _fetchAllPages(String path, String token) async {
+    final rows = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final response = await _apiClient.request('GET', path,
+          query: {'page': page, 'per_page': 100}, token: token);
+      if (!response.isSuccess) return null;
+      final data = response.body['data'];
+      if (data is List) {
+        rows.addAll(data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
       }
-    }
-    return [];
-  }
-
-  static bool _isTruthy(dynamic v) => v == true || v == 1 || v == '1';
-
-  /// `dokter/getAll` is a public endpoint (no token) per API_ENDPOINTS.md §2,
-  /// so it's kept separate from [refreshAll]'s token-gated loop — fetched
-  /// lazily the first time the verification form needs the vet list, then
-  /// cached the same way as the other lookups.
-  Future<dynamic> getCachedDokter() async {
-    final cached = await _readCached('dokter');
-    if (cached != null) return cached;
-    try {
-      final response = await _apiClient.post(ApiEndpoints.dokterGetAll);
-      if (!isApiSuccess(response)) return null;
-      final data = response['data'] ?? response;
-      await _writeCache('dokter', jsonEncode(data));
-      return data;
-    } catch (_) {
-      return null;
+      final lastPage = response.body['last_page'] as int? ?? page;
+      if (page >= lastPage) return rows;
+      page++;
     }
   }
 
-  Future<dynamic> _readCached(String cacheKey) async {
-    // sqflite has no web implementation — the master cache simply doesn't
-    // persist there; callers should rely on a fresh refreshAll() instead.
-    if (kIsWeb) return null;
+  Future<List<Map<String, dynamic>>> _readCached(String cacheKey) async {
+    // sqflite has no web implementation — nothing persists there.
+    if (kIsWeb) return [];
     try {
       final entry = await SQLiteManager.instance.getMasterCache(cacheKey);
-      if (entry == null) return null;
-      return jsonDecode(entry.dataJson);
+      if (entry == null) return [];
+      final decoded = jsonDecode(entry.dataJson);
+      return decoded is List
+          ? decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : [];
     } catch (_) {
-      return null;
+      return [];
     }
   }
 

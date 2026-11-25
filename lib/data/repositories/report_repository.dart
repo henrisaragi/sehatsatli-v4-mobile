@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
 
+import '../../app_state.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_response_helper.dart';
-import 'local_report_merge.dart';
+import '../models/laporan_fields.dart';
+import 'sync_repository.dart';
 
-enum ReportSubmitStatus { sentImmediately, queuedOffline, failed }
+enum ReportSubmitStatus { sent, queuedOffline, failed }
 
 class ReportSubmitResult {
   ReportSubmitResult({required this.status, this.message});
@@ -26,16 +27,29 @@ class ReportListResult {
   final String? errorMessage;
 }
 
+/// Wizard stages after create, keyed by the `tahap` they fill.
+const Map<String, String> stageEndpoints = {
+  'investigasi': ApiEndpoints.laporanInvestigasi,
+  'verifikasi_dokter': ApiEndpoints.laporanVerifikasiDokter,
+  'hasil_lab': ApiEndpoints.laporanHasilLab,
+};
+
+/// Offline-first laporan writes. Every write lands in `local_reports` (a
+/// flat snapshot shaped like `GET laporan/{id}`) and `sync_queue` first; the
+/// queue is then drained by [SyncRepository], immediately when online.
 class ReportRepository {
-  ReportRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
+  ReportRepository({ApiClient? apiClient})
+      : _apiClient = apiClient ?? ApiClient(),
+        _syncRepository = SyncRepository(apiClient: apiClient);
 
   final ApiClient _apiClient;
+  final SyncRepository _syncRepository;
 
-  /// Generated once per new report and reused for every subsequent
-  /// draft-save/submit/retry of that same report — the server uses this as
-  /// the idempotency key for create-vs-update (API_ENDPOINTS.md §3).
+  /// Device-generated id, sent as `client_uuid` so a retried create returns
+  /// the same server laporan instead of a duplicate.
   String newClientId() => const Uuid().v4();
 
+  /// Saves an unfinished new-report form locally without queueing anything.
   Future<void> saveDraft({
     required String clientId,
     required Map<String, dynamic> payload,
@@ -43,326 +57,192 @@ class ReportRepository {
     if (kIsWeb) return;
     await SQLiteManager.instance.upsertLocalReport(
       clientId: clientId,
-      payloadJson: jsonEncode({...payload, 'client_id': clientId}),
+      payloadJson: jsonEncode(payload),
       syncStatus: 'draft',
     );
   }
 
-  /// Always persists locally first and queues a sync_queue entry (the
-  /// offline outbox), then makes one immediate send attempt if [token] is
-  /// available. A full background retry worker that watches connectivity is
-  /// a separate piece of work (Fase 3d) — this just makes the first attempt
-  /// and leaves the row queued on failure.
-  Future<ReportSubmitResult> submit({
+  /// Queues a new laporan (`POST laporan`), its investigation stage and its
+  /// photos in one go, then tries to send them.
+  Future<ReportSubmitResult> createWithInvestigasi({
     required String clientId,
+    required Map<String, dynamic> createPayload,
+    Map<String, dynamic> display = const {},
+    required Map<String, dynamic> investigasi,
+    List<String> photoPaths = const [],
+  }) async {
+    final create = {...createPayload, 'client_uuid': clientId};
+    await _writeLocal(clientId, {
+      ...display,
+      ...create,
+      ...investigasi,
+      'tahap': nextTahap('investigasi'),
+      'foto_lokal': photoPaths,
+    });
+    await _enqueue(clientId, ApiEndpoints.laporan, 'POST', create);
+    await _enqueue(clientId, ApiEndpoints.laporanInvestigasi, 'PUT', investigasi);
+    await _enqueuePhotos(clientId, photoPaths);
+    return _drain(clientId);
+  }
+
+  /// Queues the form of [tahap] (`investigasi`, `verifikasi_dokter` or
+  /// `hasil_lab`) for an existing local report, then tries to send it.
+  Future<ReportSubmitResult> submitStage({
+    required String clientId,
+    required String tahap,
     required Map<String, dynamic> payload,
-    String? token,
-    String endpoint = ApiEndpoints.saveGeneralReportMobile,
+    Map<String, dynamic> display = const {},
+    List<String> photoPaths = const [],
   }) async {
-    final payloadWithId = {...payload, 'client_id': clientId};
-    final payloadJson = jsonEncode(payloadWithId);
+    final local = await SQLiteManager.instance.getLocalReport(clientId);
+    final current = jsonDecode(local?.payloadJson ?? '{}') as Map<String, dynamic>;
+    await _writeLocal(clientId, {
+      ...current,
+      ...display,
+      ...payload,
+      'tahap': nextTahap(tahap),
+      'foto_lokal': [...?(current['foto_lokal'] as List?), ...photoPaths],
+    });
+    await _enqueue(clientId, stageEndpoints[tahap]!, 'PUT', payload);
+    await _enqueuePhotos(clientId, photoPaths);
+    return _drain(clientId);
+  }
 
-    int? queueId;
-    if (!kIsWeb) {
-      await applyServerResultToLocalReport(
-        clientId: clientId,
-        outgoingPayload: payloadWithId,
-        responseData: const {},
-        syncStatus: 'pending',
-      );
-      queueId = await SQLiteManager.instance.enqueueSyncItem(
-        clientId: clientId,
-        endpoint: endpoint,
-        payloadJson: payloadJson,
-      );
-    }
+  /// Puts the report's rejected queue items back in line and resends.
+  Future<ReportSubmitResult> retry(String clientId) async {
+    await _syncRepository.retryFailed(clientId);
+    return _statusOf(clientId);
+  }
 
-    if (token == null) {
-      return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
-    }
+  /// Removes a report that only exists on this device. Backend v4 has no
+  /// delete endpoint, so reports already on the server can't be removed here.
+  Future<void> deleteLocal(String clientId) async {
+    if (kIsWeb) return;
+    await SQLiteManager.instance.deleteLocalReport(clientId);
+  }
 
-    try {
-      final response = await _apiClient.post(
-        endpoint,
-        body: payloadWithId,
-        token: token,
-      );
-
-      if (!isApiSuccess(response)) {
-        final message = extractApiMessage(response);
-        if (queueId != null) {
-          await SQLiteManager.instance
-              .markSyncItemFailed(queueId, message ?? 'Server rejected the report');
-        }
-        if (!kIsWeb) {
-          await applyServerResultToLocalReport(
-            clientId: clientId,
-            outgoingPayload: payloadWithId,
-            responseData: const {},
-            syncStatus: 'failed',
-          );
-        }
-        return ReportSubmitResult(status: ReportSubmitStatus.failed, message: message);
-      }
-
-      final data = response['data'] is Map<String, dynamic>
-          ? response['data'] as Map<String, dynamic>
-          : response;
-
-      // Guard against the `success: true, data: null` anomaly documented on
-      // `ApiEndpoints.generalReportsSave` — the specific 2026-08-12 trigger
-      // (sending `id: 0` on create) is fixed at the call sites, but nothing
-      // stops this response shape from recurring for some other reason. If
-      // we can't confirm a real server id (either just returned, or already
-      // known from a prior successful sync of this report), don't trust
-      // `success: true` blindly: marking it 'synced' anyway would hide the
-      // report from the local-drafts fallback (it's filtered out once
-      // synced) while it was never actually persisted server-side, making it
-      // silently vanish from every list. Treat it as failed instead so it
-      // stays visible and retryable.
-      final existing = !kIsWeb ? await SQLiteManager.instance.getLocalReport(clientId) : null;
-      if (data['id'] == null && existing?.serverId == null) {
-        const message =
-            'Server tidak mengonfirmasi ID laporan — kemungkinan tidak tersimpan. Coba kirim ulang.';
-        if (queueId != null) {
-          await SQLiteManager.instance.markSyncItemFailed(queueId, message);
-        }
-        if (!kIsWeb) {
-          await applyServerResultToLocalReport(
-            clientId: clientId,
-            outgoingPayload: payloadWithId,
-            responseData: const {},
-            syncStatus: 'failed',
-          );
-        }
-        return ReportSubmitResult(status: ReportSubmitStatus.failed, message: message);
-      }
-
-      if (queueId != null) {
-        await SQLiteManager.instance.markSyncItemDone(queueId);
-      }
-      if (!kIsWeb) {
-        await applyServerResultToLocalReport(
-          clientId: clientId,
-          outgoingPayload: payloadWithId,
-          responseData: data,
-          syncStatus: 'synced',
+  /// Makes sure a server laporan opened on this device has a local row, so
+  /// its next stage can be queued offline. Returns the local client id.
+  Future<String> ensureLocalRow(Map<String, dynamic> remote) async {
+    final serverId = remote['id'].toString();
+    for (final row in await SQLiteManager.instance.getAllLocalReports()) {
+      if (row.serverId == serverId) {
+        final local = jsonDecode(row.payloadJson ?? '{}') as Map<String, dynamic>;
+        // Stages still waiting in the queue are newer than the server copy.
+        final merged = row.syncStatus == 'synced'
+            ? {...local, ...remote, 'foto_lokal': local['foto_lokal']}
+            : {...remote, ...local};
+        await SQLiteManager.instance.upsertLocalReport(
+          clientId: row.clientId,
+          payloadJson: jsonEncode(merged),
+          syncStatus: row.syncStatus,
         );
+        return row.clientId;
       }
-      return ReportSubmitResult(status: ReportSubmitStatus.sentImmediately);
-    } on ApiNetworkException {
-      // Stays queued in sync_queue with sync_status 'pending' — safe to
-      // retry later since the server dedupes on client_id.
-      return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
     }
+    final clientId = remote['client_uuid']?.toString() ?? newClientId();
+    await SQLiteManager.instance.upsertLocalReport(
+      clientId: clientId,
+      payloadJson: jsonEncode(remote),
+      syncStatus: 'synced',
+      serverId: serverId,
+    );
+    return clientId;
   }
 
-  /// Full Report Tabs 2-4 (Verifikasi/Lab/Investigasi Lanjutan) — unlike
-  /// [submit], each of these endpoints (saveVerify/saveLab/saveInvestigation)
-  /// takes only that tab's flat fields plus a hidden `id` = the report's
-  /// server id, and must NOT replace the whole `local_reports.payload_json`
-  /// snapshot the way [submit] does (that would wipe out the other tabs'
-  /// cached data — see [applyServerResultToLocalReport]).
-  ///
-  /// Because these endpoints operate on an already-existing report row, they
-  /// need a numeric server id. Under offline-first that id may not exist yet
-  /// if the report's own create (Tab 1 / Quick Report) hasn't synced — in
-  /// that case this queues the section with a `_resolveIdFromClientId`
-  /// marker instead of attempting a POST that's guaranteed to fail; see
-  /// `SyncRepository.runSyncQueue`, which resolves the real id from
-  /// `local_reports.server_id` right before sending once it's known.
-  ///
-  /// Requires a `local_reports` row to already exist for [clientId] (i.e.
-  /// Tab 1 has been saved locally at least once) — callers should disable
-  /// Tabs 2-4 until that's true rather than relying on the failure message
-  /// below.
-  Future<ReportSubmitResult> submitSection({
-    required String clientId,
-    required String sectionKey,
-    required Map<String, dynamic> sectionPayload,
-    required String endpoint,
-    String? token,
-  }) async {
-    final existing = await SQLiteManager.instance.getLocalReport(clientId);
-    if (existing == null) {
-      return ReportSubmitResult(
-        status: ReportSubmitStatus.failed,
-        message: 'Laporan awal (Investigasi) belum pernah disimpan.',
-      );
-    }
-
-    final serverId = existing.serverId;
-    final outgoingPayload = <String, dynamic>{
-      ...sectionPayload,
-      'client_id': clientId,
-      '_sectionKey': sectionKey,
-      if (serverId != null) 'id': serverId else '_resolveIdFromClientId': true,
-    };
-    final payloadJson = jsonEncode(outgoingPayload);
-
-    int? queueId;
-    if (!kIsWeb) {
-      queueId = await SQLiteManager.instance.enqueueSyncItem(
-        clientId: clientId,
-        endpoint: endpoint,
-        payloadJson: payloadJson,
-      );
-      await applyServerResultToLocalReport(
-        clientId: clientId,
-        outgoingPayload: outgoingPayload,
-        responseData: const {},
-        syncStatus: 'pending',
-      );
-    }
-
-    if (serverId == null) {
-      // Guaranteed to fail server-side without a real report id — leave it
-      // queued for the sync engine to resolve once Tab 1 has synced.
-      return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
-    }
-
-    if (token == null) {
-      return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
-    }
-
-    try {
-      final response = await _apiClient.post(
-        endpoint,
-        body: {...outgoingPayload}..remove('_sectionKey'),
-        token: token,
-      );
-
-      if (!isApiSuccess(response)) {
-        final message = extractApiMessage(response);
-        if (queueId != null) {
-          await SQLiteManager.instance
-              .markSyncItemFailed(queueId, message ?? 'Server rejected the report');
-        }
-        if (!kIsWeb) {
-          await applyServerResultToLocalReport(
-            clientId: clientId,
-            outgoingPayload: outgoingPayload,
-            responseData: const {},
-            syncStatus: 'failed',
-          );
-        }
-        return ReportSubmitResult(status: ReportSubmitStatus.failed, message: message);
-      }
-
-      final data = response['data'] is Map<String, dynamic>
-          ? response['data'] as Map<String, dynamic>
-          : response;
-
-      if (queueId != null) {
-        await SQLiteManager.instance.markSyncItemDone(queueId);
-      }
-      if (!kIsWeb) {
-        await applyServerResultToLocalReport(
-          clientId: clientId,
-          outgoingPayload: outgoingPayload,
-          responseData: data,
-          syncStatus: 'synced',
-        );
-      }
-      return ReportSubmitResult(status: ReportSubmitStatus.sentImmediately);
-    } on ApiNetworkException {
-      return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
-    }
-  }
-
-  /// [serverId] null means the report never made it to the server (a local
-  /// draft still "Menunggu sinkronisasi") — nothing to delete remotely, just
-  /// drop the local row and any queued sync job for it. Otherwise deletes
-  /// server-side first (matching the live web app's `general-reports/delete`
-  /// contract — `{id: serverId}`, not `{client_id}`) and only clears the
-  /// local row once that succeeds, so a failed/offline delete leaves the
-  /// report intact instead of silently going out of sync with the server.
-  Future<bool> delete(
-    String clientId, {
-    required String token,
-    int? serverId,
-  }) async {
-    if (serverId != null) {
-      final response = await _apiClient.post(
-        ApiEndpoints.generalReportsDelete,
-        body: {'id': serverId},
-        token: token,
-      );
-      if (!isApiSuccess(response)) return false;
-    }
-    if (!kIsWeb) {
-      await SQLiteManager.instance.deleteLocalReport(clientId);
-    }
-    return true;
-  }
-
-  /// [training] maps to the `{ id: 1|0 }` body flag API_ENDPOINTS.md §3
-  /// documents for filtering training vs. production data — an unfortunate
-  /// name collision with the report's own server `id`, but that's the
-  /// server's literal contract. Lets [ApiNetworkException] propagate to the
-  /// caller (no connection); a server-side rejection instead comes back as
-  /// an empty list + [ReportListResult.errorMessage].
+  /// `GET laporan` (all) or `GET laporan/saya` (mine), 25 per page. Network
+  /// failures propagate as [ApiNetworkException].
   Future<ReportListResult> fetchReports({
-    required bool training,
     required int page,
     required String token,
+    bool mine = false,
   }) async {
-    final response = await _apiClient.post(
-      ApiEndpoints.generalReportsGetAll,
-      body: {'id': training ? 1 : 0, 'page': page},
+    final response = await _apiClient.request(
+      'GET',
+      mine ? ApiEndpoints.laporanSaya : ApiEndpoints.laporan,
+      query: {'page': page, 'per_page': 25},
       token: token,
     );
-
-    if (!isApiSuccess(response)) {
-      return ReportListResult(
-        reports: [],
-        hasMore: false,
-        errorMessage: extractApiMessage(response) ?? 'Gagal memuat laporan',
-      );
+    if (!response.isSuccess) {
+      return ReportListResult(reports: [], hasMore: false, errorMessage: response.message);
     }
-
-    final data = response['data'];
-    List<dynamic> items;
-    bool hasMore;
-    // Response is expected to be a Laravel paginator ({data, current_page,
-    // last_page, ...}) but the exact shape isn't confirmed against a live
-    // response yet — fall back to treating `data` as a bare list.
-    if (data is Map<String, dynamic> && data['data'] is List) {
-      items = data['data'] as List;
-      final currentPage = data['current_page'] as int? ?? page;
-      final lastPage = data['last_page'] as int? ?? currentPage;
-      hasMore = currentPage < lastPage;
-    } else if (data is List) {
-      items = data;
-      hasMore = items.length >= 10; // best-effort: doc says 10/page
-    } else {
-      items = const [];
-      hasMore = false;
-    }
-
+    final items = response.body['data'];
+    final currentPage = response.body['current_page'] as int? ?? page;
+    final lastPage = response.body['last_page'] as int? ?? currentPage;
     return ReportListResult(
-      reports:
-          items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
-      hasMore: hasMore,
+      reports: items is List
+          ? items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : [],
+      hasMore: currentPage < lastPage,
     );
   }
 
-  /// Returns the full nested report (reporter/locations/species/diagnoses +
-  /// verification/lab/investigation if present), or null if not found /
-  /// rejected by the server.
+  /// `GET laporan/{id}` — full detail incl. `barang_bukti` and `foto` (with
+  /// signed download URLs). Null if the server doesn't return it.
   Future<Map<String, dynamic>?> fetchOne({
-    required dynamic id,
+    required String id,
     required String token,
   }) async {
-    final response = await _apiClient.post(
-      ApiEndpoints.getOne,
-      body: {'id': id},
+    final response = await _apiClient.request(
+      'GET',
+      ApiEndpoints.laporanDetail(id),
       token: token,
     );
-    if (!isApiSuccess(response)) return null;
-    final data = response['data'];
-    if (data is Map<String, dynamic>) return data;
-    return null;
+    return response.isSuccess ? response.body : null;
   }
 
+  Future<void> _writeLocal(String clientId, Map<String, dynamic> payload) async {
+    if (kIsWeb) return;
+    await SQLiteManager.instance.upsertLocalReport(
+      clientId: clientId,
+      payloadJson: jsonEncode(payload),
+      syncStatus: 'pending',
+    );
+  }
+
+  Future<void> _enqueue(
+    String clientId,
+    String endpoint,
+    String method,
+    Map<String, dynamic> payload,
+  ) async {
+    if (kIsWeb) return;
+    await SQLiteManager.instance.enqueueSyncItem(
+      clientId: clientId,
+      endpoint: endpoint,
+      method: method,
+      payloadJson: jsonEncode(payload),
+    );
+  }
+
+  Future<void> _enqueuePhotos(String clientId, List<String> paths) async {
+    for (final path in paths) {
+      await _enqueue(clientId, ApiEndpoints.laporanFoto, syncMethodUploadPhoto, {
+        'local_path': path,
+        'content_type': 'image/jpeg',
+      });
+    }
+  }
+
+  Future<ReportSubmitResult> _drain(String clientId) async {
+    if (FFAppState().accessToken != null) {
+      await _syncRepository.runSyncQueue();
+    }
+    return _statusOf(clientId);
+  }
+
+  Future<ReportSubmitResult> _statusOf(String clientId) async {
+    final local = await SQLiteManager.instance.getLocalReport(clientId);
+    switch (local?.syncStatus) {
+      case 'synced':
+        return ReportSubmitResult(status: ReportSubmitStatus.sent);
+      case 'failed':
+        return ReportSubmitResult(
+          status: ReportSubmitStatus.failed,
+          message: local?.lastError,
+        );
+      default:
+        return ReportSubmitResult(status: ReportSubmitStatus.queuedOffline);
+    }
+  }
 }

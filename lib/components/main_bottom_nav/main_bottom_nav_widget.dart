@@ -6,9 +6,9 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 
-/// The 4 real tabs per docs/tasks.md's IA — Beranda/Laporan/Notifikasi/Profil.
-/// "Buat Laporan" is a separate flow reached via the FAB, not a tab.
-enum MainTab { beranda, laporan, notifikasi, profil }
+/// The 4 tabs — Beranda/Laporan/Sinkron/Profil. "Buat Laporan" is a
+/// separate flow reached via the FAB, not a tab.
+enum MainTab { beranda, laporan, sinkron, profil }
 
 class MainBottomNavWidget extends StatelessWidget {
   const MainBottomNavWidget({super.key, required this.currentTab});
@@ -24,8 +24,8 @@ class MainBottomNavWidget extends StatelessWidget {
       case MainTab.laporan:
         context.goNamed(ReportHistoryWidget.routeName);
         break;
-      case MainTab.notifikasi:
-        context.goNamed(NotificationInboxWidget.routeName);
+      case MainTab.sinkron:
+        context.goNamed(SyncManagerWidget.routeName);
         break;
       case MainTab.profil:
         context.goNamed(UserProfileSettingsWidget.routeName);
@@ -75,15 +75,15 @@ class MainBottomNavWidget extends StatelessWidget {
                 // Spacer for the FAB notch.
                 SizedBox(width: 64.0),
                 NavItemWidget(
-                  label: 'Notifikasi',
+                  label: 'Sinkron',
                   icon: Icon(
-                    LucideIcons.bell,
-                    color: currentTab == MainTab.notifikasi
+                    LucideIcons.refreshCw,
+                    color: currentTab == MainTab.sinkron
                         ? FlutterFlowTheme.of(context).primary
                         : FlutterFlowTheme.of(context).secondaryText,
                   ),
-                  selected: currentTab == MainTab.notifikasi,
-                  onTap: () => _goTo(context, MainTab.notifikasi),
+                  selected: currentTab == MainTab.sinkron,
+                  onTap: () => _goTo(context, MainTab.sinkron),
                 ),
                 NavItemWidget(
                   label: 'Profil',

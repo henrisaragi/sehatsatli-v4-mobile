@@ -30,7 +30,7 @@ class FFAppState extends ChangeNotifier {
     _historySearchQuery = value;
   }
 
-  String _historyFilter = 'All';
+  String _historyFilter = 'Semua';
   String get historyFilter => _historyFilter;
   set historyFilter(String value) {
     _historyFilter = value;

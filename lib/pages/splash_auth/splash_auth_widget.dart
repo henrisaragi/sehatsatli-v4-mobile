@@ -711,35 +711,6 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                           ),
                                         ),
                                       ),
-                                      InkWell(
-                                        splashColor: Colors.transparent,
-                                        focusColor: Colors.transparent,
-                                        hoverColor: Colors.transparent,
-                                        highlightColor: Colors.transparent,
-                                        onTap: () => context.pushNamed(
-                                            CommunityReportWidget.routeName),
-                                        child: Padding(
-                                          padding: EdgeInsets.only(top: 8.0),
-                                          child: Text(
-                                            'Bukan petugas? Kirim Laporan Cepat tanpa akun',
-                                            textAlign: TextAlign.center,
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodySmall
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primary,
-                                                  decoration:
-                                                      TextDecoration.underline,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                        ),
-                                      ),
                                     ].divide(SizedBox(height: 8.0)),
                                   ),
                                 ].divide(SizedBox(height: 24.0)),

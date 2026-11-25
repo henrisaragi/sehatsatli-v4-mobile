@@ -5,25 +5,21 @@ import '../../core/network/api_client.dart';
 import '../../core/network/api_response_helper.dart';
 import '../../core/storage/secure_storage.dart';
 
-class AuthResult {
-  AuthResult({
+class PasswordResetResult {
+  PasswordResetResult({
     required this.success,
-    this.token,
-    this.user,
+    this.resetToken,
     this.message,
+    this.tokenInvalid = false,
   });
 
   final bool success;
-  final String? token;
-  final dynamic user;
+  final String? resetToken;
   final String? message;
-}
 
-class OtpResult {
-  OtpResult({required this.success, this.message});
-
-  final bool success;
-  final String? message;
+  /// True when the reset token is expired or out of attempts — restart from
+  /// step 1.
+  final bool tokenInvalid;
 }
 
 /// Step 1 of the v4 login flow (docs-new-versions/login.md) — result of
@@ -208,14 +204,14 @@ class AuthRepository {
   Future<void> updatePersistedUser(Map<String, dynamic> user) =>
       _secureStorage.saveUserJson(jsonEncode(user));
 
-  /// Revokes the token server-side (also clears the FCM device token per
-  /// API_ENDPOINTS.md §1) and always clears the local session regardless of
-  /// whether the network call succeeds.
+  /// Revokes the token server-side (`POST auth/logout`) and always clears
+  /// the local session, even offline. Never touches `local_reports` or
+  /// `sync_queue` — unsynced field data survives a logout (CLAUDE.md §10.5).
   Future<void> logout() async {
     final token = await _secureStorage.readToken();
     if (token != null) {
       try {
-        await _apiClient.post(ApiEndpoints.logout, token: token);
+        await _apiClient.request('POST', ApiEndpoints.authLogout, token: token);
       } on ApiNetworkException {
         // Best-effort — still clear the local session below.
       }
@@ -224,68 +220,59 @@ class AuthRepository {
     await _secureStorage.deleteUserJson();
   }
 
-  /// Server endpoint is misleadingly named "forgot-password" but actually
-  /// changes the password of the currently-logged-in user (API_ENDPOINTS.md §1).
-  Future<AuthResult> changePassword(String newPassword) async {
-    final token = await _secureStorage.readToken();
-    final response = await _apiClient.post(
-      ApiEndpoints.changePassword,
-      token: token,
-      body: {'password': newPassword},
-    );
-
-    if (!isApiSuccess(response)) {
-      return AuthResult(success: false, message: extractApiMessage(response));
-    }
-    return AuthResult(success: true);
-  }
-
-  /// Step 1 of the guest OTP reset flow (docs/reset-password.md) — emails a
-  /// one-time code to [email]. Unauthenticated, no token.
-  Future<OtpResult> requestPasswordOtp(String email) async {
-    final response = await _apiClient.post(
+  /// Step 1 of the guest reset flow (docs-new-versions/forgot-password.md) —
+  /// emails an OTP and returns a `reset_token` (valid 5 minutes) that steps
+  /// 2 and 3 carry.
+  Future<PasswordResetResult> requestPasswordOtp(String email) async {
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.passwordOtpRequest,
       body: {'email': email},
     );
-    if (!isApiSuccess(response)) {
-      return OtpResult(success: false, message: extractApiMessage(response));
+    final resetToken = response.body['reset_token'];
+    if (response.isSuccess && resetToken is String) {
+      return PasswordResetResult(success: true, resetToken: resetToken);
     }
-    return OtpResult(success: true);
+    return PasswordResetResult(success: false, message: response.message);
   }
 
-  /// Step 2 — verifies the OTP emailed in [requestPasswordOtp] before the
-  /// user is allowed to set a new password.
-  Future<OtpResult> verifyPasswordOtp(String email, String otp) async {
-    final response = await _apiClient.post(
+  /// Step 2 — checks the OTP against [resetToken]. On a wrong code the server
+  /// answers 422 with `attempts_remaining`; without it the token is dead and
+  /// the user must restart from step 1.
+  Future<PasswordResetResult> verifyPasswordOtp(String resetToken, String otp) async {
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.passwordOtpVerify,
-      body: {'email': email, 'otp': otp},
+      body: {'reset_token': resetToken, 'otp': otp},
     );
-    if (!isApiSuccess(response)) {
-      return OtpResult(success: false, message: extractApiMessage(response));
+    if (response.isSuccess) {
+      return PasswordResetResult(success: true, resetToken: resetToken);
     }
-    return OtpResult(success: true);
+    return PasswordResetResult(
+      success: false,
+      message: response.message,
+      tokenInvalid: response.body['attempts_remaining'] is! int,
+    );
   }
 
-  /// Step 3 — sets the new password using the same verified [email]/[otp]
-  /// pair.
-  Future<OtpResult> resetPasswordWithOtp(
-    String email,
-    String otp,
+  /// Step 3 — sets the new password with the verified [resetToken]. The
+  /// server revokes every existing access token of the user.
+  Future<PasswordResetResult> resetPasswordWithOtp(
+    String resetToken,
     String password,
     String passwordConfirmation,
   ) async {
-    final response = await _apiClient.post(
+    final response = await _apiClient.request(
+      'POST',
       ApiEndpoints.passwordOtpReset,
       body: {
-        'email': email,
-        'otp': otp,
+        'reset_token': resetToken,
         'password': password,
         'password_confirmation': passwordConfirmation,
       },
     );
-    if (!isApiSuccess(response)) {
-      return OtpResult(success: false, message: extractApiMessage(response));
-    }
-    return OtpResult(success: true);
+    return response.isSuccess
+        ? PasswordResetResult(success: true)
+        : PasswordResetResult(success: false, message: response.message);
   }
 }

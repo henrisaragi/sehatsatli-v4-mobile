@@ -15,41 +15,43 @@ Future<void> performUpsertMasterCache(
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
+/// Inserts a new row or replaces the payload/status of an existing one,
+/// keeping `created_at`, and keeping `server_id`/`report_code`/`last_error`
+/// unless new values are passed.
 Future<void> performUpsertLocalReport(
   Database database, {
   required String clientId,
   required String payloadJson,
   required String syncStatus,
-  int? serverId,
+  String? serverId,
   String? reportCode,
+  String? lastError,
 }) async {
   final now = DateTime.now().toIso8601String();
   final existing = await database.query(
     'local_reports',
-    columns: ['created_at'],
     where: 'client_id = ?',
     whereArgs: [clientId],
     limit: 1,
   );
+  final previous = existing.isNotEmpty ? existing.first : const <String, Object?>{};
   await database.insert(
     'local_reports',
     {
       'client_id': clientId,
-      'server_id': serverId,
-      'report_code': reportCode,
+      'server_id': serverId ?? previous['server_id'],
+      'report_code': reportCode ?? previous['report_code'],
       'payload_json': payloadJson,
       'sync_status': syncStatus,
+      'last_error': syncStatus == 'failed' ? (lastError ?? previous['last_error']) : null,
       'retry_count': 0,
-      'created_at': existing.isNotEmpty ? existing.first['created_at'] : now,
+      'created_at': previous['created_at'] ?? now,
       'updated_at': now,
     },
     conflictAlgorithm: ConflictAlgorithm.replace,
   );
 }
 
-/// Removes the local cache row and any queued (not-yet-sent) sync jobs for
-/// this report — without clearing the queue too, a stale `sync_queue` entry
-/// for an already-deleted report would resurrect it on the next drain.
 Future<void> performDeleteLocalReport(
   Database database,
   String clientId,
@@ -107,4 +109,12 @@ Future<void> performIncrementSyncItemRetry(
     database.rawUpdate(
       'UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ? WHERE id = ?',
       [lastError, id],
+    );
+
+Future<void> performResetFailedSyncItems(Database database, String clientId) =>
+    database.update(
+      'sync_queue',
+      {'status': 'pending'},
+      where: "client_id = ? AND status = 'failed'",
+      whereArgs: [clientId],
     );

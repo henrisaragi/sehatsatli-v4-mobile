@@ -42,7 +42,6 @@ class AppStateNotifier extends ChangeNotifier {
 Set<String> get _kPublicRoutePaths => {
       '/',
       SplashAuthWidget.routePath,
-      CommunityReportWidget.routePath,
       ForgotPasswordWidget.routePath,
       // Pre-auth steps of the v4 login/registration flow (no token yet).
       OtpLoginWidget.routePath,
@@ -62,16 +61,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         if (!isLoggedIn && !isPublicRoute) {
           return SplashAuthWidget.routePath;
         }
-        // Keeps sending a logged-in user with a still-temporary password
-        // (admin-issued default, see FFAppState.mustResetPassword) back to
-        // the mandatory change-password screen instead of anywhere else in
-        // the app, until they clear it or explicitly log out.
-        if (isLoggedIn &&
-            !isPublicRoute &&
-            FFAppState().mustResetPassword &&
-            state.matchedLocation != ForcePasswordChangeWidget.routePath) {
-          return ForcePasswordChangeWidget.routePath;
-        }
         return null;
       },
       routes: [
@@ -79,16 +68,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: '_initialize',
           path: '/',
           builder: (context, _) => SplashAuthWidget(),
-        ),
-        FFRoute(
-          name: ForcePasswordChangeWidget.routeName,
-          path: ForcePasswordChangeWidget.routePath,
-          builder: (context, params) => ForcePasswordChangeWidget(),
-        ),
-        FFRoute(
-          name: CommunityReportWidget.routeName,
-          path: CommunityReportWidget.routePath,
-          builder: (context, params) => CommunityReportWidget(),
         ),
         FFRoute(
           name: ForgotPasswordWidget.routeName,
@@ -115,11 +94,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => RegistrationStatusWidget(),
         ),
         FFRoute(
-          name: CommunityReportListWidget.routeName,
-          path: CommunityReportListWidget.routePath,
-          builder: (context, params) => CommunityReportListWidget(),
-        ),
-        FFRoute(
           name: DashboardWidget.routeName,
           path: DashboardWidget.routePath,
           builder: (context, params) => DashboardWidget(),
@@ -127,17 +101,9 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: QuickReportWidget.routeName,
           path: QuickReportWidget.routePath,
-          builder: (context, params) => QuickReportWidget(),
-        ),
-        FFRoute(
-          name: NotificationInboxWidget.routeName,
-          path: NotificationInboxWidget.routePath,
-          builder: (context, params) => NotificationInboxWidget(),
-        ),
-        FFRoute(
-          name: EditProfileWidget.routeName,
-          path: EditProfileWidget.routePath,
-          builder: (context, params) => EditProfileWidget(),
+          builder: (context, params) => QuickReportWidget(
+            clientId: params.getParam('clientId', ParamType.String),
+          ),
         ),
         FFRoute(
           name: FullReportWidget.routeName,

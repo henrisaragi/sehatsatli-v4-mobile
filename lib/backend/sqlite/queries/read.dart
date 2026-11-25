@@ -22,7 +22,9 @@ class GetAllLocalReportsRow extends SqliteRow {
   GetAllLocalReportsRow(Map<String, dynamic> data) : super(data);
 
   String get clientId => data['client_id'] as String;
-  int? get serverId => data['server_id'] as int?;
+  /// Server UUID (backend v4). Read via toString() because SQLite's INTEGER
+  /// column affinity keeps it TEXT only as long as it isn't numeric.
+  String? get serverId => data['server_id']?.toString();
   String? get reportCode => data['report_code'] as String?;
   String? get payloadJson => data['payload_json'] as String?;
   String get syncStatus => data['sync_status'] as String;
@@ -81,11 +83,26 @@ Future<MasterCacheEntry?> performGetMasterCache(
 /// END GETMASTERCACHE
 
 /// BEGIN GETPENDINGSYNCQUEUE
+Future<int> performCountOpenSyncItems(Database database, String clientId) async {
+  final rows = await database.rawQuery(
+    "SELECT COUNT(*) AS c FROM sync_queue WHERE client_id = ? AND status IN ('pending', 'failed')",
+    [clientId],
+  );
+  return (rows.first['c'] as int?) ?? 0;
+}
+
+Future<Set<String>> performGetClientIdsWithFailedSyncItems(Database database) async {
+  final rows = await database.rawQuery(
+    "SELECT DISTINCT client_id FROM sync_queue WHERE status = 'failed'",
+  );
+  return rows.map((r) => r['client_id'] as String).toSet();
+}
+
 Future<List<GetPendingSyncQueueRow>> performGetPendingSyncQueue(
   Database database,
 ) {
   final query = '''
-SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC;
+SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC, id ASC;
 ''';
   return _readQuery(database, query, (d) => GetPendingSyncQueueRow(d));
 }

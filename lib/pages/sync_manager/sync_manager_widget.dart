@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/sync_item/sync_item_widget.dart';
 import '/components/training_mode_banner.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
+import '../../data/models/report_list_item.dart';
 import '../../data/repositories/sync_repository.dart';
 import 'sync_manager_model.dart';
 export 'sync_manager_model.dart';
@@ -76,6 +77,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
   Color _statusBg(String status) {
     switch (status) {
       case 'failed':
+      case 'legacy':
         return FlutterFlowTheme.of(context).accent4;
       case 'draft':
         return FlutterFlowTheme.of(context).accent3;
@@ -87,6 +89,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
   Color _statusText(String status) {
     switch (status) {
       case 'failed':
+      case 'legacy':
         return FlutterFlowTheme.of(context).error;
       case 'draft':
         return FlutterFlowTheme.of(context).info;
@@ -96,21 +99,10 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
   }
 
   void _openReport(GetAllLocalReportsRow row) {
-    if (row.serverId == null) {
-      // Not synced yet (draft/pending/failed) — editable via the same
-      // Full Report page instead of a dead-end message.
-      context.pushNamed(
-        FullReportWidget.routeName,
-        queryParameters: {
-          'clientId': serializeParam(row.clientId, ParamType.String),
-        }.withoutNulls,
-      );
-      return;
-    }
     context.pushNamed(
       FullReportWidget.routeName,
       queryParameters: {
-        'reportId': serializeParam(row.serverId.toString(), ParamType.String),
+        'clientId': serializeParam(row.clientId, ParamType.String),
       }.withoutNulls,
     );
   }
@@ -133,16 +125,9 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(8.0, 22.0, 20.0, 20.0),
+                padding: EdgeInsetsDirectional.fromSTEB(20.0, 22.0, 20.0, 20.0),
                 child: Row(
                   children: [
-                    FlutterFlowIconButton(
-                      borderRadius: 8.0,
-                      buttonSize: 40.0,
-                      icon: Icon(LucideIcons.arrowLeft,
-                          color: FlutterFlowTheme.of(context).primaryText),
-                      onPressed: () => context.pop(),
-                    ),
                     Text(
                       'Sync Manager',
                       style: FlutterFlowTheme.of(context).titleLarge.override(
@@ -242,10 +227,12 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
                               child: InkWell(
                                 onTap: () => _openReport(row),
                                 child: SyncItemWidget(
-                                  title: row.reportCode ?? row.clientId,
-                                  date: row.updatedAt ?? row.createdAt,
+                                  title: ReportListItem.local(row).species,
+                                  date: ReportListItem.local(row).date,
                                   statusBg: _statusBg(row.syncStatus),
-                                  status: row.syncStatus,
+                                  status: ReportListItem.syncStatusLabels[
+                                          row.syncStatus] ??
+                                      row.syncStatus,
                                   statusText: _statusText(row.syncStatus),
                                   hasError: row.syncStatus == 'failed',
                                 ),
@@ -291,7 +278,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
                                       SizedBox(width: 12.0),
                                       Expanded(
                                         child: Text(
-                                            row.reportCode ?? row.clientId,
+                                            ReportListItem.local(row).species,
                                             style: FlutterFlowTheme.of(context)
                                                 .bodyMedium),
                                       ),
@@ -309,6 +296,7 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
           ),
         ],
       ),
+      bottomNavigationBar: MainBottomNavWidget(currentTab: MainTab.sinkron),
     );
   }
 }

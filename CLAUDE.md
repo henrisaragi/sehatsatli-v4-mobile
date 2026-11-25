@@ -25,7 +25,7 @@ SehatSatli is a mobile application used by field officers, wildlife veterinarian
 ### Key Architectural Guidelines
 
 1. **Offline-First Priority**: Field officers operate in remote conservation areas without network coverage. Form entry, offline photo handling, and geolocation tracking **must work 100% offline**. Data synchronization occurs automatically in the background when network reachability is restored.
-2. **Idempotency via `client_id`**: Every report record generated on the device must assign a persistent UUID (`client_id`). Server backend controllers (`GeneralReportSourceMobileController`) use `client_id` for idempotent creation/updates (`firstOrCreate`), ensuring retry safety without duplicate records.
+2. **Idempotency via `client_uuid`**: Every report created on the device gets a persistent UUID (`local_reports.client_id`, sent as `client_uuid`). `POST laporan` returns the existing laporan (200) when the same user retries with the same `client_uuid`, so retries never duplicate records.
 3. **FlutterFlow Compatibility**: Keep components, custom data types, API group mappings, and custom actions compatible with FlutterFlow export standards while allowing clean native Flutter maintenance.
 4. **Single Source of Visual Truth**: Adhere strictly to the design tokens derived from the SehatSatli logo (`#17B273` Primary Green, `#E67E22` Secondary Orange).
 
@@ -168,7 +168,7 @@ lib/
 -- 1. Full report JSON storage (Local Drafts + Synced Snapshots)
 CREATE TABLE local_reports (
   client_id       TEXT PRIMARY KEY,       -- Device-generated UUID
-  server_id       INTEGER,                -- Populated after first successful sync
+  server_id       INTEGER,                -- Server laporan UUID (stored as TEXT), set by the create's response
   report_code     TEXT,                   -- Populated after server generates code
   payload_json    TEXT NOT NULL,          -- Complete nested payload structure
   sync_status     TEXT NOT NULL,          -- draft | pending | syncing | synced | failed
@@ -182,8 +182,8 @@ CREATE TABLE local_reports (
 CREATE TABLE sync_queue (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id       TEXT NOT NULL,          -- FK to local_reports.client_id
-  endpoint        TEXT NOT NULL,          -- e.g. 'general-reports/saveGeneralReportMobile'
-  method          TEXT NOT NULL DEFAULT 'POST',
+  endpoint        TEXT NOT NULL,          -- e.g. 'laporan' or 'laporan/{laporan}/investigasi' ({laporan} resolved at sync time)
+  method          TEXT NOT NULL DEFAULT 'POST', -- POST | PUT | UPLOAD (photo job)
   payload_json    TEXT NOT NULL,          -- Operation payload snapshot
   status          TEXT NOT NULL DEFAULT 'pending', -- pending | in_progress | done | failed
   retry_count     INTEGER DEFAULT 0,
@@ -191,151 +191,111 @@ CREATE TABLE sync_queue (
   created_at      TEXT NOT NULL
 );
 
--- 3. Offline Photos Management
-CREATE TABLE local_photos (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  client_id       TEXT NOT NULL,
-  field_target    TEXT NOT NULL,          -- 'file' | 'verification.file_verification' | 'investigation.file_investigation'
-  local_path      TEXT NOT NULL,          -- Device storage path
-  remote_media_id INTEGER,                -- Remote Spatie media library ID
-  is_deleted      INTEGER DEFAULT 0,      -- Set to 1 if user removes photo offline
-  uploaded        INTEGER DEFAULT 0
-);
+-- 3. Photos have no table of their own: pending paths live in
+--    local_reports.payload_json.foto_lokal, each with an 'UPLOAD' sync_queue job.
 
 -- 4. Read-Only Master Cache
 CREATE TABLE master_cache (
-  cache_key       TEXT PRIMARY KEY,       -- 'masters' | 'locations' | 'species' | 'diseases' | 'upts'
+  cache_key       TEXT PRIMARY KEY,       -- 'spesies' | 'penyakit'
   data_json       TEXT NOT NULL,
   fetched_at      TEXT NOT NULL
 );
 ```
 
-### 5.2 Synchronization Engine Execution Flow (`runSyncQueue`)
+### 5.2 Synchronization Engine Execution Flow (`runSyncQueue`, `lib/data/repositories/sync_repository.dart`)
 
-1. **Guard Check**: Verify `isSyncing == false`. If already running, skip execution.
-2. **Reachability Check**: Perform active ping check to backend `ping` endpoint (5s timeout). If unreachable, halt.
-3. **FIFO Fetch**: Retrieve pending jobs from `sync_queue` sorted by `created_at ASC`.
+Every write is saved to `local_reports` (a flat snapshot shaped like `GET laporan/{id}`) and queued in `sync_queue` first; `ReportRepository` then drains the queue immediately when online. There is no separate "send now" path.
+
+1. **Guard Check**: skip if `isSyncing`; skip without a token.
+2. **Reachability Check**: `GET {hostUrl}up` (Laravel health route, 5s timeout). If unreachable, halt.
+3. **FIFO Fetch**: pending jobs ordered by `created_at ASC, id ASC`. Reports with a `failed` job are **blocked** (their later jobs wait) until the user taps "Kirim ulang" (`retryFailed` resets them to pending).
 4. **Iterative Sync**:
-   - Mark current item `status = 'in_progress'`.
-   - Read associated photos from `local_photos`. Compress & base64 encode active photos; attach remote deletion flags `{ id: remote_media_id, deleted: true }` for deleted photos.
-   - Dispatch POST request to endpoint via `SehatSatliAPI`.
-   - **On Success (`success == true`)**:
-     - Update `local_reports`: update `server_id`, `report_code`, set `sync_status = 'synced'`.
-     - Update `local_photos`: set `uploaded = 1`.
-     - Mark `sync_queue.status = 'done'`.
-   - **On Network Failure (Timeout/No Signal)**:
-     - Keep `sync_queue.status = 'pending'`, increment `retry_count`.
-     - **Break queue loop** immediately to prevent burning retries on subsequent items.
-   - **On Server Validation Error (`success == false`)**:
-     - Set `sync_queue.status = 'failed'` and record `last_error`.
-     - Set `local_reports.sync_status = 'failed'`.
-     - **Continue to next queue item** (validation failure is specific to the record, not network state).
-5. **Release Guard**: Set `isSyncing = false`.
+   - Endpoints containing `{laporan}` are resolved from `local_reports.server_id` (set by the create's response). No server id yet → block the report for this run.
+   - `method = 'UPLOAD'` jobs are photos: `POST laporan/{id}/foto/sign-upload` → raw `PUT` of the file to the presigned MinIO URL → `POST laporan/{id}/foto {object_key}`.
+   - **2xx**: job `done`; the create stores `server_id`; `tahap` only moves forward; report becomes `synced` when no open jobs remain.
+   - **Network failure, 5xx/408**: keep `pending`, increment `retry_count`, **break** the loop.
+   - **401**: break (session handling via `ApiClient.onUnauthorized`).
+   - **Other 4xx (e.g. 422)**: job `failed` + `last_error` (Laravel `errors` flattened), report `failed`, **continue** with other reports.
+5. **Release Guard**: `isSyncing = false`.
+
+`local_reports.sync_status`: `draft | pending | synced | failed | legacy`. `legacy` = unsynced reports from the pre-v4 app (DB v1), kept read-only so the user can re-enter them; they can't be sent to v4.
 
 ### 5.3 Photo Handling Guidelines
 
-- **Lazy Base64 Encoding**: Do **NOT** base64 encode photos upon taking them with camera. Store local file paths in filesystem using `path_provider`. Encode to base64 **only right before sending** HTTP payload during sync execution.
-- **Image Compression**: Apply `flutter_image_compress` (target quality ~70%, max dimensions 1280px) before saving locally.
+- Photos are compressed on capture (`flutter_image_compress`, quality ~70%, 1280px) and kept as local files; `local_reports.payload_json.foto_lokal` lists paths still waiting to upload.
+- Upload happens only during sync, straight to MinIO via a presigned URL issued by the backend (`laporan/{id}/foto/sign-upload`). The bucket is private; `GET laporan/{id}` returns `foto[].url` as 10-minute signed download URLs. Never base64 photos into JSON.
 
 ---
 
 ## 6. API Specifications & Backend Conventions
 
-### 6.1 Authentication & Header Rules
+Backend v4 (Laravel, `/Users/henrisaragi/Herd/sehatsatli-v4`) is the source of truth: `routes/api.php` + the Form Requests in `app/Http/Requests/Api/`. Check there before writing API code (see the `project-paths` skill).
 
-- **Base URL**: Set per environment (Staging / Production).
-- **Authorization**: `Authorization: Bearer <access_token>` (Passport OAuth2).
-- **Login Credentials**: User logins accept **email or phone number** as username. The backend matches MD5 hash of input (`username = md5(email)` or `username1 = md5(phone)`).
-- **Response Format Caveat**: Backend returns **HTTP 200** for failed authentication with `{ "success": false, "message": { ... } }`. **Never** rely strictly on HTTP status codes for error handling. Always check the `success` boolean field in responses.
+### 6.1 Authentication, Headers & Responses
 
-### 6.2 Primary Mobile Endpoints (`auth:api` group)
+- **Base URL**: `https://sehatsatli.ksdae.kehutanan.go.id/api-v4/api/` (`ApiEndpoints.baseUrl`); endpoint paths carry no `api/` prefix.
+- **Login**: 2 steps — `auth/login {email, password}` → `login_token`; `auth/otp/verify {login_token, otp}` → `access_token` (Passport). Profile: `GET user`. Logout: `POST auth/logout` (revokes the token).
+- **Authorization**: `Authorization: Bearer <access_token>`, stored in `flutter_secure_storage`.
+- **Responses**: real HTTP status codes and bare JSON — no `success` field. 2xx = success; 422 = `{message, errors: {field: [..]}}`; 429 = throttled (`auth/*`: 6/minute). Use `ApiClient.request()` → `ApiResponse` (`isSuccess`, `isTransient`, `message`).
 
-| Function           | Endpoint Path                               | Notes                                                  |
-| ------------------ | ------------------------------------------- | ------------------------------------------------------ |
-| Login              | `auth/login-app`                            | Public endpoint, returns Passport token & user profile |
-| Master Dropdowns   | `masters`                                   | Returns options, categories, user flags                |
-| Location Master    | `locations` / `location-user`               | Administrative regions cached locally                  |
-| Master Species     | `species/getAll`                            | Wildlife catalog with priority/protected flags         |
-| Master Diseases    | `diseases/getAll`                           | Disease catalog with priority/zoonosis flags           |
-| Get Reports List   | `general-reports/getGeneralReportMobile`    | **Paginated (10/page)**, auto-scoped to UPT            |
-| Get Report Detail  | `general-reports/getOne`                    | Retrieves full nested relations & media                |
-| **Save Report**    | `general-reports/saveGeneralReportMobile`   | Main nested create/update endpoint using `client_id`   |
-| **Delete Report**  | `general-reports/deleteGeneralReportMobile` | Soft deletes report by **`client_id`**                 |
-| Register FCM Token | `users/user/token`                          | Submit device push notification token                  |
-| User Heartbeat     | `user-activities/track`                     | Track monthly active status + FCM token                |
+### 6.2 Mobile Endpoints
 
-> ⚠️ **Endpoint Warning**: Use **only** `*Mobile` endpoints in `auth:api` group. Avoid legacy un-scoped endpoints (e.g. `generalReport/getAll`, `locationss`).
+| Function                  | Endpoint                                                                   | Notes                                                       |
+| ------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Login / OTP / logout      | `auth/login`, `auth/otp/verify`, `auth/logout`                             | throttled                                                   |
+| Lupa password             | `auth/password/otp/request` → `/verify` → `/reset`                         | carries `reset_token`                                       |
+| Registrasi UPT            | `upt`, `upt/{id}/unit-organisasi`, `registrasi/upt`, `registrasi/status`   | NIP/jabatan/UPT come from `registrasi/status`               |
+| Master species / diseases | `spesies`, `penyakit`                                                      | paginated (`per_page` ≤ 100), cached in `master_cache`      |
+| Laporan list              | `laporan` (all), `laporan/saya` (mine)                                     | paginated                                                   |
+| Laporan detail            | `laporan/{id}`                                                             | includes `barang_bukti`, `foto` (signed URLs)               |
+| Create laporan            | `POST laporan`                                                             | `client_uuid` makes retries idempotent (returns 200 + same) |
+| Stage updates             | `PUT laporan/{id}/investigasi`, `/verifikasi-dokter`, `/hasil-lab`         | each advances `tahap`                                       |
+| Photos                    | `POST laporan/{id}/foto/sign-upload`, `POST laporan/{id}/foto`, `DELETE …` | MinIO presigned PUT                                         |
+| Dashboard                 | `dashboard/ringkasan`                                                      | `{nasional, entitas: [{nama_entitas, total}]}`              |
 
-### 6.3 Report Payload Structure (`GeneralReportSource`)
+There is **no** delete endpoint for laporan: only reports that never reached the server can be removed (locally).
 
-Mobile API expects nested parameters:
+### 6.3 Laporan Wizard Payloads
+
+`tahap`: `investigasi → verifikasi_dokter → hasil_lab → selesai`.
 
 ```json
-{
-  "client_id": "c7a8f9b2-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
-  "report_date": "2026-03-30 10:00:00",
-  "species_id": 14,
-  "protected": true,
-  "dead": 1,
-  "live": 0,
-  "description": "Found dead in conservation area",
-  "reporter": {
-    "name": "Budi Santoso",
-    "gender": "Laki-laki",
-    "occupation": "Petugas Lapangan",
-    "phone": "08123456789",
-    "address": "BKSDA Region II",
-    "case_found": "Patroli Rutin"
-  },
-  "locations": {
-    "upt_id": 5,
-    "province_id": 31,
-    "district_id": 3171,
-    "subdistrict_id": 317101,
-    "village_id": 3171011001,
-    "latitude": "-6.2088",
-    "longitude": "106.8456"
-  },
-  "diagnoses": {
-    "report_date": "2026-03-30",
-    "dead": 1,
-    "dead_sign": "Bintik merah pada kulit",
-    "temporary_diagnosis_id": 3
-  },
-  "investigation": null,
-  "verification": null,
-  "lab": null,
-  "acknowledgement": null,
-  "file": ["data:image/jpeg;base64,/9j/4AAQSkZJRg..."]
-}
+// POST laporan
+{ "client_uuid": "c7a8f9b2-…", "spesies_id": "<uuid>", "kelompok_umur": "dewasa" }
+// or, for species outside the P.106 master:
+{ "client_uuid": "…", "nama_jenis_lokal": "Burung kutilang", "kelompok_umur": "anakan" }
+
+// PUT laporan/{id}/investigasi
+{ "tanggal_kejadian": "2026-11-20", "jumlah_sakit": 2, "jumlah_mati": 1,
+  "kondisi_jika_mati": "…", "kronologi": "…", "tindak_lanjut": "…",
+  "kesimpulan_awal": "suspek_penyakit", "id_penyakit": "<uuid>|null",
+  "latitude": -6.9147, "longitude": 107.6098 }
+
+// PUT laporan/{id}/verifikasi-dokter
+{ "verifikasi_suspek_penyakit": true, "aksi_dilakukan": "…", "informasi_tambahan": "…" }
+
+// PUT laporan/{id}/hasil-lab
+{ "penyakit_id": "<uuid>|null", "diagnosis_penyakit": "…", "aksi_lanjutan": "…",
+  "investigasi_lanjutan": false, "periode_investigasi_mulai": "2026-11-21",
+  "periode_investigasi_selesai": "2026-11-25",
+  "barang_bukti": [{ "jenis_barang_bukti": "Sampel darah", "jumlah": "2 tabung", "keterangan": null }],
+  "tindakan_lanjutan": "…", "keterangan_tambahan": "…" }
 ```
 
----
-
-## 7. Role-Based Access Control (RBAC) Rules
-
-User roles and screen/feature gates are governed by attributes on the `User` object:
-
-| User Attribute     | Scope & Feature Permissions                                                                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `upt_id`           | If `upt_id > 2`, reports and master data are automatically filtered to the user's specific UPT. If `upt_id <= 2` (Pusat), user has global read access. |
-| `is_doctor`        | Controls access to the **Veterinary Verification Stage** form (`verification.*` & `saveVerify`).                                                       |
-| `heads_upt`        | Grants access to the **Head of UPT Approval/Sign-off Stage** (`acknowledgement.*`). Receives priority FCM notifications.                               |
-| `training_mode`    | When `true`, automatically tags created reports as training data (`training = true`). Shows permanent orange training banner in UI.                    |
-| `all_notification` | Receives all new report alerts for the user's UPT via FCM.                                                                                             |
+Option values (`kelompok_umur`, `kesimpulan_awal`) live in `lib/data/models/laporan_fields.dart`, mirroring the web app.
 
 ---
 
-## 8. Form Lifecycle & Stepper Strategy
+## 7. Role-Based Access Control (RBAC)
 
-The primary report creation form uses a multi-step stepper linear flow:
+Backend v4 does not gate the `laporan` wizard: any logged-in user can fill every stage. `GET user` returns `roles` and `permissions` (Spatie); the old `is_doctor` / `heads_upt` / `training_mode` / `upt_id` flags no longer exist. A user whose UPT registration isn't `terverifikasi` is routed to the registration status page after login.
 
-1. **Step 1: Pelapor (Reporter)** → `reporter.*`
-2. **Step 2: Lokasi (Location)** → `locations.*` (Automatic GPS fetch via `geolocator`, manual fallback)
-3. **Step 3: Spesies (Species)** → `species.*` (Lookup from cached `Species` table)
-4. **Step 4: Diagnosis Awal (Initial Diagnosis)** → `diagnoses.*` + photo capture
+---
 
-**Draft Storage Rule**: Every time the user taps "Next" or moves between steps, immediately call `upsertLocalDraft()` to save current progress to SQLite with `sync_status = 'draft'`. Tapping "Save & Submit" on the final step marks `sync_status = 'pending'`, queues the item in `sync_queue`, and triggers `runSyncQueue()`.
+## 8. Form Lifecycle
+
+1. **Laporan Baru** (`quick_report_widget.dart`): step 1 jenis satwa (P.106 species from cache, or a manual local name) + kelompok umur; step 2 investigasi + GPS + photos. "Lanjut" saves a local draft (`sync_status = 'draft'`); "Kirim Laporan" queues create + investigasi + photos and drains the queue.
+2. **Detail** (`full_report_widget.dart`): completed stages read-only, plus the form for the current `tahap` (verifikasi dokter, then hasil lab). The next stage can be queued offline even while earlier ones are still pending.
 
 ---
 
@@ -378,7 +338,7 @@ flutter build ios --release
 ## 10. Development Conventions & Checklist
 
 1. **Never Make Direct Network Calls in UI**: Always route network requests through repository classes and API helper functions.
-2. **Strict Use of `isApiSuccess(response)` Helper**: Standardize API checks across all call sites to evaluate body `success == true` rather than HTTP status code alone.
+2. **Use `ApiClient.request()` / `ApiResponse`**: backend v4 signals success with HTTP status codes; never look for a `success` field.
 3. **Always Check Local DB First**: Dropdowns for forms must fetch options from `master_cache` in SQLite to ensure functionality in zero-signal areas.
 4. **Secure Token Storage**: Always store Passport Bearer tokens in `flutter_secure_storage`. Do not persist auth tokens in plain `SharedPreferences`.
 5. **Preserve Unsynced Drafts on Logout**: Logging out must clear session tokens, but **must not wipe** `local_reports` or `sync_queue` table data to avoid losing field data gathered offline.

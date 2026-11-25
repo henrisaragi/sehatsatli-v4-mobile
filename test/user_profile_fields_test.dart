@@ -1,31 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sehat_satli/data/models/user_profile_fields.dart';
 
-/// Covers revisi.md bug note #2 (Tipe UPT/Nama UPT auto-fill from the
-/// logged-in user's nested `data.user.upt_type`/`upt_id`) — by the time this
-/// class is constructed the caller has already unwrapped `data.user` (see
-/// `AuthRepository.login()`), so these getters just need correct flat-key
-/// extraction and to degrade gracefully when the value is absent.
+/// `GET user` (backend v4) shape — see `UserController::show`.
 void main() {
-  group('uptType', () {
-    test('reads the confirmed upt_type key', () {
-      expect(UserProfileFields({'upt_type': 'PUSAT'}).uptType, 'PUSAT');
+  test('reads nama_lengkap, email and no_hp', () {
+    final fields = UserProfileFields({
+      'nama_lengkap': 'Budi Santoso',
+      'email': 'budi@example.com',
+      'no_hp': '0812',
     });
 
-    test('is null when absent', () {
-      expect(UserProfileFields({}).uptType, isNull);
-      expect(UserProfileFields(null).uptType, isNull);
-    });
+    expect(fields.name, 'Budi Santoso');
+    expect(fields.email, 'budi@example.com');
+    expect(fields.phone, '0812');
   });
 
-  group('uptId', () {
-    test('passes through whatever type the server sent (numeric id)', () {
-      expect(UserProfileFields({'upt_id': 1}).uptId, 1);
+  test('formats the first role name', () {
+    final fields = UserProfileFields({
+      'roles': [
+        {'id': 2, 'name': 'upt-ksda'},
+      ],
     });
 
-    test('is null when absent', () {
-      expect(UserProfileFields({}).uptId, isNull);
-      expect(UserProfileFields(null).uptId, isNull);
-    });
+    expect(fields.role, 'Upt Ksda');
+  });
+
+  test('falls back when fields are missing', () {
+    expect(UserProfileFields(null).name, 'Pengguna');
+    expect(UserProfileFields({}).role, '-');
+    expect(UserProfileFields({'no_hp': '  '}).phone, isNull);
   });
 }

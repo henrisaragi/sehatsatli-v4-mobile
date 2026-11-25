@@ -8,17 +8,13 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:sehat_satli/app_state.dart';
+import 'package:sehat_satli/backend/sqlite/init.dart';
 import 'package:sehat_satli/backend/sqlite/sqlite_manager.dart';
 import 'package:sehat_satli/core/network/api_client.dart';
 import 'package:sehat_satli/data/repositories/report_repository.dart';
-import 'package:sehat_satli/data/repositories/sync_repository.dart';
 
-/// Covers tasks.md Fase 7's "uji alur offline: isi laporan tanpa koneksi →
-/// kirim otomatis saat online kembali, tidak duplikat (verifikasi
-/// client_id)" item — exercising the real SQLite schema (via
-/// `sqflite_common_ffi`, since plain `flutter test` has no platform channel
-/// for the real `sqflite`) and the FIFO drain algorithm from CLAUDE.md §5.2,
-/// with a fake `http.Client` standing in for the network.
+/// Offline-first laporan flow against backend v4 (CLAUDE.md §5.2): real
+/// SQLite schema via `sqflite_common_ffi`, fake `http.Client` for the server.
 void main() {
   setUpAll(() async {
     sqfliteFfiInit();
@@ -33,324 +29,249 @@ void main() {
     await db.delete('local_reports');
     await db.delete('sync_queue');
     await db.delete('master_cache');
+    FFAppState().accessToken = 'tok';
   });
 
-  tearDown(() {
-    FFAppState.reset();
+  tearDown(FFAppState.reset);
+
+  const createPayload = {'spesies_id': 'spesies-1', 'kelompok_umur': 'dewasa'};
+  const investigasi = {
+    'tanggal_kejadian': '2026-11-20',
+    'jumlah_sakit': 2,
+    'kronologi': 'Lesu sejak dua hari lalu.',
+    'tindak_lanjut': 'Dipisahkan dari kandang utama.',
+    'kesimpulan_awal': 'suspek_penyakit',
+    'latitude': -6.9,
+    'longitude': 107.6,
+  };
+
+  http.Response json(int status, Object body) =>
+      http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
+
+  /// Fake v4 server; [handler] answers API calls, `/up` always succeeds.
+  MockClient server(Future<http.Response> Function(http.Request request) handler) =>
+      MockClient((request) async {
+        if (request.url.path.endsWith('/up')) return http.Response('', 200);
+        return handler(request);
+      });
+
+  Future<Map<String, dynamic>> localPayload(String clientId) async {
+    final row = await SQLiteManager.instance.getLocalReport(clientId);
+    return jsonDecode(row!.payloadJson!) as Map<String, dynamic>;
+  }
+
+  test('offline: create + investigasi stay queued in order, report is pending', () async {
+    final offline = MockClient((_) async => throw const SocketException('offline'));
+    final repo = ReportRepository(apiClient: ApiClient(client: offline));
+
+    final result = await repo.createWithInvestigasi(
+      clientId: 'c-offline',
+      createPayload: createPayload,
+      investigasi: investigasi,
+    );
+
+    expect(result.status, ReportSubmitStatus.queuedOffline);
+    final queue = await SQLiteManager.instance.getPendingSyncQueue();
+    expect(queue.map((q) => '${q.method} ${q.endpoint}'),
+        ['POST laporan', 'PUT laporan/{laporan}/investigasi']);
+    expect(jsonDecode(queue.first.payloadJson)['client_uuid'], 'c-offline');
+
+    final row = await SQLiteManager.instance.getLocalReport('c-offline');
+    expect(row!.syncStatus, 'pending');
+    expect((await localPayload('c-offline'))['tahap'], 'verifikasi_dokter');
   });
 
-  test(
-      'submit() retried while offline does not duplicate the local_reports '
-      'row, though sync_queue gets one entry per attempt (server dedupes by '
-      'client_id on drain, not the local queue)', () async {
-    final offlineClient = MockClient((request) async {
-      throw const SocketException('offline');
-    });
-    final repo = ReportRepository(apiClient: ApiClient(client: offlineClient));
-    const clientId = 'test-client-offline-retry';
-    final payload = {'report_date': '2026-01-01', 'description': 'test'};
-
-    final first =
-        await repo.submit(clientId: clientId, payload: payload, token: 'tok');
-    final second =
-        await repo.submit(clientId: clientId, payload: payload, token: 'tok');
-
-    expect(first.status, ReportSubmitStatus.queuedOffline);
-    expect(second.status, ReportSubmitStatus.queuedOffline);
-
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    expect(localRows.where((r) => r.clientId == clientId), hasLength(1));
-
-    final queued = await SQLiteManager.instance.getPendingSyncQueue();
-    expect(queued.where((r) => r.clientId == clientId), hasLength(2));
-  });
-
-  test(
-      'submit() treats a `success: true, data: null` response as failed '
-      'instead of marking a report with no confirmed server id as synced '
-      '(regression: this exact shape previously caused newly-created '
-      'reports to vanish — success:true so nothing looked wrong, but no '
-      'id ever came back, so the report was invisible both server-side '
-      'and in the local drafts list once wrongly marked synced)', () async {
-    final client = MockClient((request) async {
-      return http.Response(jsonEncode({'success': true, 'data': null}), 200);
+  test('online: create resolves the server UUID used by the next stage', () async {
+    final requests = <String>[];
+    final client = server((request) async {
+      requests.add('${request.method} ${request.url.path}');
+      if (request.method == 'POST' && request.url.path.endsWith('/api/laporan')) {
+        expect(jsonDecode(request.body)['client_uuid'], 'c-online');
+        return json(201, {'id': 'uuid-1', 'tahap': 'investigasi'});
+      }
+      return json(200, {'id': 'uuid-1', 'tahap': 'verifikasi_dokter'});
     });
     final repo = ReportRepository(apiClient: ApiClient(client: client));
-    const clientId = 'test-client-phantom-success';
-    final payload = {'report_date': '2026-01-01', 'description': 'test'};
 
-    final result =
-        await repo.submit(clientId: clientId, payload: payload, token: 'tok');
+    final result = await repo.createWithInvestigasi(
+      clientId: 'c-online',
+      createPayload: createPayload,
+      investigasi: investigasi,
+    );
 
-    expect(result.status, ReportSubmitStatus.failed);
-
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    final row = localRows.firstWhere((r) => r.clientId == clientId);
-    expect(row.syncStatus, 'failed');
-    expect(row.serverId, isNull);
+    expect(result.status, ReportSubmitStatus.sent);
+    expect(requests, [
+      'POST /api-v4/api/laporan',
+      'PUT /api-v4/api/laporan/uuid-1/investigasi',
+    ]);
+    final row = await SQLiteManager.instance.getLocalReport('c-online');
+    expect(row!.syncStatus, 'synced');
+    expect(row.serverId, 'uuid-1');
+    expect((await localPayload('c-online'))['tahap'], 'verifikasi_dokter');
+    expect(await SQLiteManager.instance.getPendingSyncQueue(), isEmpty);
   });
 
-  test(
-      'runSyncQueue() marks a successfully-synced item done and updates '
-      'local_reports to synced with the server id/report code', () async {
-    const clientId = 'test-client-sync-success';
-    await SQLiteManager.instance.upsertLocalReport(
-      clientId: clientId,
-      payloadJson: jsonEncode({'client_id': clientId}),
-      syncStatus: 'pending',
-    );
-    final queueId = await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/saveGeneralReportMobile',
-      payloadJson: jsonEncode({'client_id': clientId}),
-    );
-
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
+  test('a rejected create blocks its later stages until the user retries', () async {
+    var rejectCreate = true;
+    final requests = <String>[];
+    final client = server((request) async {
+      requests.add('${request.method} ${request.url.path}');
+      if (request.url.path.endsWith('/api/laporan')) {
+        return rejectCreate
+            ? json(422, {
+                'message': 'The given data was invalid.',
+                'errors': {
+                  'spesies_id': ['The selected spesies id is invalid.'],
+                },
+              })
+            : json(201, {'id': 'uuid-2', 'tahap': 'investigasi'});
       }
-      return http.Response(
-        jsonEncode({
-          'success': true,
-          'data': {'id': 42, 'report_code': 'REP-42'},
-        }),
-        200,
-      );
+      return json(200, {'id': 'uuid-2', 'tahap': 'verifikasi_dokter'});
     });
+    final repo = ReportRepository(apiClient: ApiClient(client: client));
 
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+    final first = await repo.createWithInvestigasi(
+      clientId: 'c-rejected',
+      createPayload: createPayload,
+      investigasi: investigasi,
+    );
 
-    final stillPending = await SQLiteManager.instance.getPendingSyncQueue();
-    expect(stillPending.where((r) => r.id == queueId), isEmpty);
+    expect(first.status, ReportSubmitStatus.failed);
+    expect(first.message, 'The selected spesies id is invalid.');
+    expect(requests, ['POST /api-v4/api/laporan']); // investigasi never sent
 
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    final row = localRows.firstWhere((r) => r.clientId == clientId);
-    expect(row.syncStatus, 'synced');
-    expect(row.serverId, 42);
-    expect(row.reportCode, 'REP-42');
+    rejectCreate = false;
+    final retried = await repo.retry('c-rejected');
+
+    expect(retried.status, ReportSubmitStatus.sent);
+    expect(requests.last, 'PUT /api-v4/api/laporan/uuid-2/investigasi');
+    final row = await SQLiteManager.instance.getLocalReport('c-rejected');
+    expect(row!.syncStatus, 'synced');
+    expect(row.lastError, isNull);
   });
 
-  test(
-      'runSyncQueue() stops draining after the first network failure '
-      '(CLAUDE.md §5.2: break the loop, do not burn through the rest of the '
-      'queue) instead of marking every item failed', () async {
-    const firstClientId = 'test-client-network-fail-1';
-    const secondClientId = 'test-client-network-fail-2';
-    for (final clientId in [firstClientId, secondClientId]) {
-      await SQLiteManager.instance.upsertLocalReport(
+  test('network failure stops the drain and only bumps the attempted item', () async {
+    for (final clientId in ['c-net-1', 'c-net-2']) {
+      await ReportRepository(
+        apiClient: ApiClient(client: MockClient((_) async => throw const SocketException('x'))),
+      ).createWithInvestigasi(
         clientId: clientId,
-        payloadJson: jsonEncode({'client_id': clientId}),
-        syncStatus: 'pending',
-      );
-      await SQLiteManager.instance.enqueueSyncItem(
-        clientId: clientId,
-        endpoint: 'general-reports/saveGeneralReportMobile',
-        payloadJson: jsonEncode({'client_id': clientId}),
+        createPayload: createPayload,
+        investigasi: investigasi,
       );
     }
 
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
-      }
-      throw const SocketException('connection dropped mid-sync');
-    });
+    final client = server((_) async => throw const SocketException('dropped mid-sync'));
+    await ReportRepository(apiClient: ApiClient(client: client)).retry('c-net-1');
 
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
-
-    final queued = await SQLiteManager.instance.getPendingSyncQueue();
-    expect(queued, hasLength(2)); // both still pending, neither marked failed
-
-    final first = queued.firstWhere((r) => r.clientId == firstClientId);
-    final second = queued.firstWhere((r) => r.clientId == secondClientId);
-    expect(first.retryCount, 1); // the one attempt that failed
-    expect(second.retryCount, 0); // never even attempted — loop broke first
+    final queue = await SQLiteManager.instance.getPendingSyncQueue();
+    expect(queue, hasLength(4)); // nothing marked failed
+    expect(queue.first.retryCount, 1);
+    expect(queue.skip(1).every((q) => q.retryCount == 0), isTrue);
   });
 
-  test(
-      'runSyncQueue() applies the same data:null guard as submit() when '
-      'draining a queued create — marks the item failed rather than done, '
-      'and the local row stays out of \'synced\'', () async {
-    const clientId = 'test-client-phantom-success-queued';
-    await SQLiteManager.instance.upsertLocalReport(
-      clientId: clientId,
-      payloadJson: jsonEncode({'client_id': clientId}),
-      syncStatus: 'pending',
-    );
-    final queueId = await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/save',
-      payloadJson: jsonEncode({'client_id': clientId}),
+  test('server error (5xx) is retried later, not marked failed', () async {
+    final client = server((_) async => json(503, {'message': 'Service Unavailable'}));
+    final result = await ReportRepository(apiClient: ApiClient(client: client))
+        .createWithInvestigasi(
+      clientId: 'c-503',
+      createPayload: createPayload,
+      investigasi: investigasi,
     );
 
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
-      }
-      return http.Response(jsonEncode({'success': true, 'data': null}), 200);
-    });
-
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
-
-    final stillPending = await SQLiteManager.instance.getPendingSyncQueue();
-    expect(stillPending.where((r) => r.id == queueId), isEmpty); // not left pending
-
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    final row = localRows.firstWhere((r) => r.clientId == clientId);
-    expect(row.syncStatus, 'failed');
-    expect(row.serverId, isNull);
+    expect(result.status, ReportSubmitStatus.queuedOffline);
+    final queue = await SQLiteManager.instance.getPendingSyncQueue();
+    expect(queue, hasLength(2));
+    expect(queue.first.retryCount, 1);
   });
 
-  test(
-      'runSyncQueue() leaves a _resolveIdFromClientId item pending and never '
-      'posts it while its report\'s server_id is still unknown', () async {
-    const clientId = 'test-client-unresolved-dependent';
-    // No local_reports row at all yet — the Tab 1 create hasn't even been
-    // queued, let alone synced, so server_id can't possibly be known.
-    final queueId = await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/saveVerify',
-      payloadJson: jsonEncode({
-        'verified_date': '2026-01-01',
-        'client_id': clientId,
-        '_sectionKey': 'verification',
-        '_resolveIdFromClientId': true,
-      }),
-    );
-
-    var postCount = 0;
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
+  test('photo: sign-upload, raw PUT to object storage, then register', () async {
+    final photo = File(p.join(Directory.systemTemp.path, 'foto-test.jpg'))
+      ..writeAsBytesSync([0xFF, 0xD8, 0xFF]);
+    final requests = <String>[];
+    final client = server((request) async {
+      requests.add('${request.method} ${request.url.host}${request.url.path}');
+      final path = request.url.path;
+      if (path.endsWith('/api/laporan')) return json(201, {'id': 'uuid-3', 'tahap': 'investigasi'});
+      if (path.endsWith('/investigasi')) return json(200, {'id': 'uuid-3', 'tahap': 'verifikasi_dokter'});
+      if (path.endsWith('/foto/sign-upload')) {
+        expect(jsonDecode(request.body), {'content_type': 'image/jpeg'});
+        return json(200, {
+          'method': 'PUT',
+          'url': 'https://s3.example.test/sehatsatli/laporan/uuid-3/a.jpg?X-Amz-Signature=x',
+          'headers': {'Content-Type': 'image/jpeg'},
+          'object_key': 'laporan/uuid-3/a.jpg',
+        });
       }
-      postCount++;
-      return http.Response(jsonEncode({'success': true, 'data': {}}), 200);
+      if (request.url.host == 's3.example.test') {
+        expect(request.bodyBytes, [0xFF, 0xD8, 0xFF]);
+        expect(request.headers['Content-Type'], 'image/jpeg');
+        return http.Response('', 200);
+      }
+      expect(jsonDecode(request.body), {'object_key': 'laporan/uuid-3/a.jpg'});
+      return json(201, {'id': 'foto-1', 'object_key': 'laporan/uuid-3/a.jpg', 'url': 'https://signed'});
     });
 
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+    final result = await ReportRepository(apiClient: ApiClient(client: client))
+        .createWithInvestigasi(
+      clientId: 'c-foto',
+      createPayload: createPayload,
+      investigasi: investigasi,
+      photoPaths: [photo.path],
+    );
 
-    expect(postCount, 0); // never attempted — server id unresolved
-    final stillQueued = await SQLiteManager.instance.getPendingSyncQueue();
-    final row = stillQueued.firstWhere((r) => r.id == queueId);
-    expect(row.status, 'pending');
-    expect(row.retryCount, 0); // untouched, not counted as a failed attempt
+    expect(result.status, ReportSubmitStatus.sent);
+    expect(requests.skip(2), [
+      'POST sehatsatli.ksdae.kehutanan.go.id/api-v4/api/laporan/uuid-3/foto/sign-upload',
+      'PUT s3.example.test/sehatsatli/laporan/uuid-3/a.jpg',
+      'POST sehatsatli.ksdae.kehutanan.go.id/api-v4/api/laporan/uuid-3/foto',
+    ]);
+    final payload = await localPayload('c-foto');
+    expect(payload['foto_lokal'], isEmpty);
+    expect((payload['foto'] as List).single['id'], 'foto-1');
   });
 
-  test(
-      'runSyncQueue() resolves a dependent section item in the same drain '
-      'pass once its report\'s create item (queued earlier) succeeds',
-      () async {
-    const clientId = 'test-client-same-pass-resolve';
-    await SQLiteManager.instance.upsertLocalReport(
-      clientId: clientId,
-      payloadJson: jsonEncode({'client_id': clientId, 'report_date': '2026-01-01'}),
-      syncStatus: 'pending',
-    );
-    // Enqueued first (create), so FIFO drains it before the dependent item.
-    await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/save',
-      payloadJson: jsonEncode({'client_id': clientId, 'report_date': '2026-01-01'}),
-    );
-    await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/saveVerify',
-      payloadJson: jsonEncode({
-        'verified_date': '2026-01-01',
-        'client_id': clientId,
-        '_sectionKey': 'verification',
-        '_resolveIdFromClientId': true,
-      }),
-    );
-
-    dynamic verifyRequestBody;
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
-      }
-      if (request.url.path.contains('saveVerify')) {
-        verifyRequestBody = jsonDecode(request.body);
-        return http.Response(jsonEncode({'success': true, 'data': {}}), 200);
-      }
-      // The create call — returns the new server id.
-      return http.Response(
-        jsonEncode({
-          'success': true,
-          'data': {'id': 77, 'report_code': 'REP-77'},
-        }),
-        200,
-      );
+  test('upgrading the v1 database keeps unsynced old reports as legacy', () async {
+    final path = p.join(await databaseFactory.getDatabasesPath(), 'upgrade_test.db');
+    await databaseFactory.deleteDatabase(path);
+    final v1 = await databaseFactory.openDatabase(path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) async {
+            await db.execute('CREATE TABLE local_reports (client_id TEXT PRIMARY KEY, '
+                'server_id INTEGER, report_code TEXT, payload_json TEXT NOT NULL, '
+                'sync_status TEXT NOT NULL, last_error TEXT, retry_count INTEGER NOT NULL '
+                'DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT)');
+            await db.execute("CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "client_id TEXT NOT NULL, endpoint TEXT NOT NULL, method TEXT NOT NULL DEFAULT "
+                "'POST', payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', "
+                "retry_count INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL)");
+            await db.execute('CREATE TABLE master_cache (cache_key TEXT PRIMARY KEY, '
+                'data_json TEXT NOT NULL, fetched_at TEXT NOT NULL)');
+          },
+        ));
+    for (final (id, status) in [('old-pending', 'pending'), ('old-synced', 'synced')]) {
+      await v1.insert('local_reports', {
+        'client_id': id,
+        'payload_json': '{}',
+        'sync_status': status,
+        'created_at': '2026-08-01',
+      });
+    }
+    await v1.insert('sync_queue', {
+      'client_id': 'old-pending',
+      'endpoint': 'api/general-reports/save',
+      'payload_json': '{}',
+      'created_at': '2026-08-01',
     });
+    await v1.close();
 
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
+    final upgraded = await initializeDatabase('upgrade_test');
+    final reports = await upgraded.query('local_reports');
+    final queue = await upgraded.query('sync_queue');
+    await upgraded.close();
 
-    final stillPending = await SQLiteManager.instance.getPendingSyncQueue();
-    expect(stillPending.where((r) => r.clientId == clientId), isEmpty);
-    expect(verifyRequestBody, isNotNull);
-    expect(verifyRequestBody['id'], 77); // resolved from the create's server id
-    expect(verifyRequestBody.containsKey('_resolveIdFromClientId'), isFalse);
-
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    final row = localRows.firstWhere((r) => r.clientId == clientId);
-    expect(row.serverId, 77);
-    expect(row.reportCode, 'REP-77');
-  });
-
-  test(
-      'runSyncQueue() merges a section-endpoint success into payload_json '
-      'without erasing other sections or nulling an already-known server_id',
-      () async {
-    const clientId = 'test-client-section-merge';
-    await SQLiteManager.instance.upsertLocalReport(
-      clientId: clientId,
-      payloadJson: jsonEncode({
-        'client_id': clientId,
-        'report_date': '2026-01-01',
-        'lab': {'final_diagnosis': 'existing lab data'},
-      }),
-      syncStatus: 'synced',
-      serverId: 10,
-      reportCode: 'REP-10',
-    );
-    await SQLiteManager.instance.enqueueSyncItem(
-      clientId: clientId,
-      endpoint: 'general-reports/saveVerify',
-      payloadJson: jsonEncode({
-        'verified_date': '2026-01-01',
-        'client_id': clientId,
-        'id': 10,
-        '_sectionKey': 'verification',
-      }),
-    );
-
-    // Response omits both `id` and `report_code` — must not null out the
-    // already-known ones.
-    final client = MockClient((request) async {
-      if (request.url.path.contains('ping')) {
-        return http.Response(jsonEncode({'success': true}), 200);
-      }
-      return http.Response(
-        jsonEncode({'success': true, 'data': {'message': 'ok'}}),
-        200,
-      );
-    });
-
-    FFAppState().accessToken = 'tok';
-    await SyncRepository(apiClient: ApiClient(client: client)).runSyncQueue();
-
-    final localRows = await SQLiteManager.instance.getAllLocalReports();
-    final row = localRows.firstWhere((r) => r.clientId == clientId);
-    expect(row.serverId, 10); // preserved, not nulled out
-    expect(row.reportCode, 'REP-10'); // preserved, not nulled out
-
-    final payload = jsonDecode(row.payloadJson!) as Map<String, dynamic>;
-    expect(payload['lab']['final_diagnosis'], 'existing lab data'); // survived
-    expect(payload['verification']['verified_date'], '2026-01-01'); // merged in
-    expect(payload['report_date'], '2026-01-01'); // top-level fields survived too
+    expect(reports.map((r) => '${r['client_id']}:${r['sync_status']}'), ['old-pending:legacy']);
+    expect(queue.single['status'], 'failed');
   });
 }

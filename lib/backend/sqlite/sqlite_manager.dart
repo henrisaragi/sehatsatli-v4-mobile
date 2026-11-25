@@ -43,6 +43,14 @@ class SQLiteManager {
   Future<List<GetPendingSyncQueueRow>> getPendingSyncQueue() =>
       performGetPendingSyncQueue(_database);
 
+  /// Reports that have at least one queue item the server rejected.
+  Future<Set<String>> getClientIdsWithFailedSyncItems() =>
+      performGetClientIdsWithFailedSyncItems(_database);
+
+  /// Queue items for [clientId] that haven't completed (pending or failed).
+  Future<int> countOpenSyncItems(String clientId) =>
+      performCountOpenSyncItems(_database, clientId);
+
   /// END READ QUERY CALLS
 
   /// START UPDATE QUERY CALLS
@@ -54,8 +62,9 @@ class SQLiteManager {
     required String clientId,
     required String payloadJson,
     required String syncStatus,
-    int? serverId,
+    String? serverId,
     String? reportCode,
+    String? lastError,
   }) =>
       performUpsertLocalReport(
         _database,
@@ -64,6 +73,7 @@ class SQLiteManager {
         syncStatus: syncStatus,
         serverId: serverId,
         reportCode: reportCode,
+        lastError: lastError,
       );
 
   Future<void> deleteLocalReport(String clientId) =>
@@ -89,6 +99,9 @@ class SQLiteManager {
   Future<void> markSyncItemFailed(int id, String error) =>
       performMarkSyncItemStatus(
           _database, id: id, status: 'failed', lastError: error);
+
+  Future<void> resetFailedSyncItems(String clientId) =>
+      performResetFailedSyncItems(_database, clientId);
 
   Future<void> incrementSyncItemRetry(int id, String error) =>
       performIncrementSyncItemRetry(_database, id: id, lastError: error);

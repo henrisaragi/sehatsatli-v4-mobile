@@ -27,14 +27,9 @@ class UserProfileSettingsModel
   late StorageStatModel storageStatModel2;
   // Model for Button.
   late ButtonModel buttonModel1;
-  // Model for ActionCard (Edit Profile — 2-column Account tile).
-  late ActionCardModel editProfileCardModel;
-  // Model for ActionCard (Security — 2-column Account tile).
-  late ActionCardModel securityCardModel;
   // Model for SettingsItem.
   late SettingsItemModel settingsItemModel3;
   // Model for SettingsItem (Laporan Masyarakat / Fase 4).
-  late SettingsItemModel communityReportListSettingsModel;
   // Model for SettingsItem.
   late SettingsItemModel settingsItemModel4;
   // Model for Switch.
@@ -52,11 +47,7 @@ class UserProfileSettingsModel
     storageStatModel1 = createModel(context, () => StorageStatModel());
     storageStatModel2 = createModel(context, () => StorageStatModel());
     buttonModel1 = createModel(context, () => ButtonModel());
-    editProfileCardModel = createModel(context, () => ActionCardModel());
-    securityCardModel = createModel(context, () => ActionCardModel());
     settingsItemModel3 = createModel(context, () => SettingsItemModel());
-    communityReportListSettingsModel =
-        createModel(context, () => SettingsItemModel());
     settingsItemModel4 = createModel(context, () => SettingsItemModel());
     switchModel = createModel(context, () => SwitchComponentModel());
     settingsItemModel5 = createModel(context, () => SettingsItemModel());
@@ -70,10 +61,7 @@ class UserProfileSettingsModel
     storageStatModel1.dispose();
     storageStatModel2.dispose();
     buttonModel1.dispose();
-    editProfileCardModel.dispose();
-    securityCardModel.dispose();
     settingsItemModel3.dispose();
-    communityReportListSettingsModel.dispose();
     settingsItemModel4.dispose();
     switchModel.dispose();
     settingsItemModel5.dispose();

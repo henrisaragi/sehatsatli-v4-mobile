@@ -1,41 +1,37 @@
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_response_helper.dart';
+
+/// `GET dashboard/ringkasan` — national laporan count plus a count per
+/// entitas (UPT) the user belongs to, primary entitas first.
+class DashboardSummary {
+  DashboardSummary({required this.nasional, required this.entitas});
+
+  final int nasional;
+
+  /// `{id, nama_entitas, total}`
+  final List<Map<String, dynamic>> entitas;
+}
 
 class DashboardRepository {
   DashboardRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
-  /// `dashboard/get-totalLaporan` (API_ENDPOINTS.md §7) has no documented
-  /// response sample anywhere, unlike every other endpoint this app calls —
-  /// tries a couple of plausible shapes and gives up (returns null) rather
-  /// than risk showing a number parsed from the wrong field. Callers should
-  /// fall back to a locally-computed estimate when this returns null.
-  Future<int?> fetchTotalLaporanBulanIni({required String token}) async {
+  /// Null when offline or the server refuses — the dashboard just hides the card.
+  Future<DashboardSummary?> fetchRingkasan({required String token}) async {
     try {
-      final response =
-          await _apiClient.post(ApiEndpoints.dashboardGetTotalLaporan, token: token);
-      if (!isApiSuccess(response)) return null;
-      return _asCount(response['data']);
+      final response = await _apiClient.request('GET', ApiEndpoints.dashboardRingkasan,
+          token: token);
+      if (!response.isSuccess) return null;
+      final entitas = response.body['entitas'];
+      return DashboardSummary(
+        nasional: (response.body['nasional'] as num?)?.toInt() ?? 0,
+        entitas: entitas is List
+            ? entitas.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+            : [],
+      );
     } on ApiNetworkException {
       return null;
     }
-  }
-
-  int? _asCount(dynamic data) {
-    if (data is int) return data;
-    if (data is String) return int.tryParse(data);
-    if (data is Map) {
-      for (final key in ['total', 'count', 'jumlah', 'total_laporan', 'totalLaporan']) {
-        final value = data[key];
-        if (value is int) return value;
-        if (value is String) {
-          final parsed = int.tryParse(value);
-          if (parsed != null) return parsed;
-        }
-      }
-    }
-    return null;
   }
 }

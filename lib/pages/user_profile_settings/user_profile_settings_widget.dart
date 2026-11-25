@@ -1,10 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-
 import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/action_card/action_card_widget.dart';
 import '/components/button/button_widget.dart';
@@ -16,7 +9,6 @@ import '/components/training_mode_banner.dart';
 import '../../core/network/api_client.dart';
 import '/data/models/user_profile_fields.dart';
 import '/data/repositories/auth_repository.dart';
-import '../../data/repositories/user_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -46,9 +38,6 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  String? _localPhotoPath;
-  bool _uploadingPhoto = false;
-
   @override
   void initState() {
     super.initState();
@@ -56,106 +45,31 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
     _refreshProfile();
   }
 
-  /// Best-effort refresh against `users/getOne`, so the page shows more
-  /// current data than the login-response snapshot when possible. Silently
-  /// keeps the existing `FFAppState().currentUser` on any failure (offline,
-  /// missing id, server rejection) — this is a nice-to-have refresh, not a
-  /// hard requirement per CLAUDE.md's offline-first principle.
+  /// Best-effort refresh against `GET user`; keeps the cached snapshot when
+  /// offline (CLAUDE.md offline-first).
   Future<void> _refreshProfile() async {
     final token = FFAppState().accessToken;
-    final fields = UserProfileFields(_currentUserMap());
-    if (token == null || fields.id == null) return;
+    if (token == null) return;
     try {
-      final fresh =
-          await UserRepository().fetchOne(id: fields.id, token: token);
-      if (fresh == null || !mounted) return;
-      setState(() => FFAppState().currentUser = fresh);
-      await AuthRepository().updatePersistedUser(fresh);
+      final auth = AuthRepository();
+      final fresh = await auth.fetchCurrentUser(token);
+      final registration = await auth.fetchRegistrationStatus(token);
+      if (!mounted) return;
+      setState(() {
+        if (fresh != null) FFAppState().currentUser = fresh;
+        if (registration.exists) _registration = registration;
+      });
     } on ApiNetworkException {
       // Offline — keep showing the cached snapshot.
     }
   }
 
+  /// NIP, jabatan and UPT live on the UPT registration, not on `GET user`.
+  RegistrationStatusResult? _registration;
+
   Map<String, dynamic>? _currentUserMap() {
     final user = FFAppState().currentUser;
     return user is Map ? Map<String, dynamic>.from(user) : null;
-  }
-
-  Future<void> _pickAndUploadPhoto(UserProfileFields fields) async {
-    final token = FFAppState().accessToken;
-    if (token == null || fields.id == null) {
-      showSnackbar(
-          context, 'Data pengguna tidak lengkap, tidak bisa unggah foto');
-      return;
-    }
-
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(LucideIcons.camera),
-              title: Text('Ambil Foto'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: Icon(LucideIcons.images),
-              title: Text('Pilih dari Galeri'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-
-    final XFile? picked = await ImagePicker()
-        .pickImage(source: source, maxWidth: 1280, imageQuality: 70);
-    if (picked == null) return;
-
-    final dir = await getTemporaryDirectory();
-    final targetPath =
-        '${dir.path}/profile_photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final compressed = await FlutterImageCompress.compressAndGetFile(
-      picked.path,
-      targetPath,
-      quality: 70,
-      minWidth: 512,
-      minHeight: 512,
-    );
-    final localPath = compressed?.path ?? picked.path;
-
-    if (!mounted) return;
-    setState(() {
-      _localPhotoPath = localPath;
-      _uploadingPhoto = true;
-    });
-
-    final bytes = await File(localPath).readAsBytes();
-    final base64File = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-
-    try {
-      final result = await UserRepository()
-          .uploadPhoto(id: fields.id, base64File: base64File, token: token);
-      if (!mounted) return;
-      setState(() => _uploadingPhoto = false);
-      if (!result.success) {
-        showSnackbar(context, result.message ?? 'Gagal mengunggah foto');
-        return;
-      }
-      if (result.user != null) {
-        final merged = {...(_currentUserMap() ?? {}), ...result.user!};
-        setState(() => FFAppState().currentUser = merged);
-        await AuthRepository().updatePersistedUser(merged);
-      }
-      showSnackbar(context, 'Foto profil berhasil diperbarui');
-    } on ApiNetworkException {
-      if (!mounted) return;
-      setState(() => _uploadingPhoto = false);
-      showSnackbar(context, 'Tidak bisa mengunggah foto — periksa koneksi');
-    }
   }
 
   @override
@@ -163,72 +77,6 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
     _model.dispose();
 
     super.dispose();
-  }
-
-  Future<void> _showChangePasswordDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    var isSubmitting = false;
-    String? errorText;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text('Ganti Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                obscureText: true,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Password baru',
-                  errorText: errorText,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed:
-                  isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
-              child: Text('Batal'),
-            ),
-            TextButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      if (controller.text.isEmpty) {
-                        setDialogState(
-                            () => errorText = 'Password tidak boleh kosong');
-                        return;
-                      }
-                      setDialogState(() {
-                        isSubmitting = true;
-                        errorText = null;
-                      });
-                      final result = await AuthRepository()
-                          .changePassword(controller.text);
-                      if (result.success) {
-                        Navigator.of(dialogContext).pop();
-                        if (context.mounted) {
-                          showSnackbar(context, 'Password berhasil diubah');
-                        }
-                      } else {
-                        setDialogState(() {
-                          isSubmitting = false;
-                          errorText =
-                              result.message ?? 'Gagal mengubah password';
-                        });
-                      }
-                    },
-              child: Text('Simpan'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -268,15 +116,10 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                           updateCallback: () => safeSetState(() {}),
                           child: ProfileHeaderWidget(
                             name: fields.name,
-                            role: fields.role,
-                            nip: fields.nip,
-                            institution: fields.institution.isEmpty
-                                ? null
-                                : fields.institution,
-                            photoUrl: fields.photoUrl,
-                            localPhotoPath: _localPhotoPath,
-                            uploadingPhoto: _uploadingPhoto,
-                            onTapAvatar: () => _pickAndUploadPhoto(fields),
+                            role: _registration?.jabatan ?? fields.role,
+                            nip: _registration?.nip ?? '-',
+                            institution:
+                                _registration?.upt?['nama']?.toString(),
                           ),
                         ),
                         Container(
@@ -578,53 +421,6 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   ),
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: wrapWithModel(
-                                      model: _model.editProfileCardModel,
-                                      updateCallback: () => safeSetState(() {}),
-                                      child: ActionCardWidget(
-                                        onTap: () async {
-                                          await context.pushNamed(
-                                              EditProfileWidget.routeName);
-                                          if (mounted) safeSetState(() {});
-                                        },
-                                        tone: FlutterFlowTheme.of(context)
-                                            .primary,
-                                        icon: Icon(
-                                          LucideIcons.user,
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          size: 24.0,
-                                        ),
-                                        title: 'Edit Profile',
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: wrapWithModel(
-                                      model: _model.securityCardModel,
-                                      updateCallback: () => safeSetState(() {}),
-                                      child: ActionCardWidget(
-                                        onTap: () =>
-                                            _showChangePasswordDialog(context),
-                                        tone: FlutterFlowTheme.of(context)
-                                            .tertiary,
-                                        icon: Icon(
-                                          LucideIcons.shieldCheck,
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          size: 24.0,
-                                        ),
-                                        title: 'Security',
-                                      ),
-                                    ),
-                                  ),
-                                ].divide(SizedBox(width: 16.0)),
-                              ),
                               Container(
                                 child: Padding(
                                   padding: EdgeInsetsDirectional.fromSTEB(
@@ -661,7 +457,7 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                 updateCallback: () => safeSetState(() {}),
                                 child: SettingsItemWidget(
                                   onTap: () => context
-                                      .pushNamed(SyncManagerWidget.routeName),
+                                      .goNamed(SyncManagerWidget.routeName),
                                   iconBg: FlutterFlowTheme.of(context)
                                       .surfaceVariant,
                                   icon: Icon(
@@ -673,25 +469,6 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                                   title: 'Sync Manager',
                                   subtitle:
                                       'Manage queue and background sync intervals',
-                                ),
-                              ),
-                              wrapWithModel(
-                                model: _model.communityReportListSettingsModel,
-                                updateCallback: () => safeSetState(() {}),
-                                child: SettingsItemWidget(
-                                  onTap: () => context.pushNamed(
-                                      CommunityReportListWidget.routeName),
-                                  iconBg: FlutterFlowTheme.of(context)
-                                      .surfaceVariant,
-                                  icon: Icon(
-                                    LucideIcons.megaphone,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 20.0,
-                                  ),
-                                  title: 'Laporan Masyarakat',
-                                  subtitle:
-                                      'Lihat laporan cepat dari warga tanpa akun',
                                 ),
                               ),
                               wrapWithModel(

@@ -1,72 +1,37 @@
-import '../../core/constants/api_endpoints.dart';
-
-/// Defensive field extraction over the raw login-response (`/api/auth/login-app`)
-/// user map. Most backend key names for these display fields aren't confirmed
-/// against a live response (see memory `api-login-contract` for the same
-/// caveat on the login contract itself), so each field tries several
-/// plausible candidates before falling back to a placeholder.
-///
-/// Shared by [UserProfileSettingsWidget] (profile screen) and the Full
-/// Report page's Investigasi tab (reporter identity and UPT are pre-filled
-/// from the logged-in user rather than typed in).
+/// Display fields from the `GET user` response (backend v4):
+/// `{id, email, nama_lengkap, no_hp, status, roles: [{name}], permissions}`.
 class UserProfileFields {
   UserProfileFields(this.raw);
 
   final Map<String, dynamic>? raw;
 
-  String? _pick(List<String> keys) {
-    if (raw == null) return null;
-    for (final key in keys) {
-      final value = raw![key];
-      if (value != null && value.toString().trim().isNotEmpty) {
-        return value.toString();
-      }
-    }
-    return null;
+  String? _pick(String key) {
+    final value = raw?[key];
+    if (value == null || value.toString().trim().isEmpty) return null;
+    return value.toString();
   }
 
   dynamic get id => raw?['id'];
 
-  String get name => _pick(['name', 'full_name', 'nama', 'username']) ?? 'Pengguna';
+  String get name => _pick('nama_lengkap') ?? 'Pengguna';
 
-  String get role =>
-      _pick(['position', 'jabatan', 'role', 'occupation', 'user_level_name']) ?? '-';
+  String? get email => _pick('email');
 
-  String get nip => _pick(['nip', 'employee_id', 'nik']) ?? '-';
+  String? get phone => _pick('no_hp');
 
-  String get institution =>
-      _pick(['upt_name', 'instansi', 'unit_name', 'office_name']) ?? '';
-
-  String? get phone => _pick(['phone', 'no_hp', 'no_telp', 'telp', 'hp', 'phone_number']);
-
-  String? get address => _pick(['address', 'alamat']);
-
-  /// Server encodes gender as an int — confirmed: 1 = Laki-laki, 2 = Perempuan.
-  String? get gender {
-    final value = _pick(['gender', 'jenis_kelamin', 'sex']);
-    if (value == null) return null;
-    switch (value.trim()) {
-      case '1':
-        return 'Laki-laki';
-      case '2':
-        return 'Perempuan';
-      default:
-        return value;
+  /// First role name made readable (`upt-ksda` → `Upt Ksda`), or `-`.
+  String get role {
+    final roles = raw?['roles'];
+    if (roles is List && roles.isNotEmpty && roles.first is Map) {
+      final name = (roles.first as Map)['name']?.toString() ?? '';
+      if (name.isNotEmpty) {
+        return name
+            .split(RegExp(r'[-_]'))
+            .where((w) => w.isNotEmpty)
+            .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
+      }
     }
-  }
-
-  /// Confirmed key names (unlike the defensive multi-key fields above) — see
-  /// `edit_profile_widget.dart`'s existing `_raw['upt_type']`/`_raw['upt_id']`
-  /// usage and revisi.md bug note #2. Used to auto-fill the read-only
-  /// Tipe UPT/Nama UPT fields in the report form.
-  String? get uptType => _pick(['upt_type']);
-
-  dynamic get uptId => raw?['upt_id'];
-
-  String? get photoUrl {
-    final value = _pick(['photo_url', 'avatar_url', 'photo', 'avatar', 'foto']);
-    if (value == null) return null;
-    if (value.startsWith('http://') || value.startsWith('https://')) return value;
-    return '${ApiEndpoints.hostUrl}$value';
+    return '-';
   }
 }

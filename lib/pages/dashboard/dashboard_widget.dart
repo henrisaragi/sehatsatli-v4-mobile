@@ -14,6 +14,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/network/api_client.dart';
+import '../../data/models/report_list_item.dart';
 import '../../data/repositories/dashboard_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/sync_repository.dart';
@@ -37,7 +38,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
 
   List<GetAllLocalReportsRow> _localReports = [];
   List<Map<String, dynamic>> _serverReports = [];
-  int? _monthlyTotal;
+  DashboardSummary? _summary;
   bool _isLoading = true;
   bool _isSyncing = false;
 
@@ -71,37 +72,25 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     if (token != null) {
       try {
         final result = await ReportRepository().fetchReports(
-          training: FFAppState().trainingMode,
           page: 1,
           token: token,
+          mine: true,
         );
         _serverReports = result.reports;
       } on ApiNetworkException {
         _serverReports = [];
       }
-      _monthlyTotal =
-          await DashboardRepository().fetchTotalLaporanBulanIni(token: token) ??
-              _fallbackMonthlyCount();
+      _summary = await DashboardRepository().fetchRingkasan(token: token);
     }
 
     if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
-  /// Only used when `dashboard/get-totalLaporan` (undocumented response
-  /// shape, see DashboardRepository) doesn't return anything parseable —
-  /// counts within the already-fetched first page of reports, so this can
-  /// under-count if there are more than one page's worth this month.
-  int _fallbackMonthlyCount() {
-    final now = DateTime.now();
-    return _serverReports.where((r) {
-      final date = DateTime.tryParse((r['report_date'] ?? '').toString());
-      return date != null && date.year == now.year && date.month == now.month;
-    }).length;
-  }
-
-  List<GetAllLocalReportsRow> get _pendingLocal =>
-      _localReports.where((r) => r.syncStatus != 'synced').toList();
+  /// Queued reports only — drafts and legacy rows are never sent.
+  List<GetAllLocalReportsRow> get _pendingLocal => _localReports
+      .where((r) => r.syncStatus == 'pending' || r.syncStatus == 'failed')
+      .toList();
 
   Future<void> _syncNow() async {
     setState(() => _isSyncing = true);
@@ -111,11 +100,8 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     await _load();
   }
 
-  List<_RecentItem> get _recentItems {
-    final local = _pendingLocal.map((r) => _RecentItem.local(r)).toList();
-    final server = _serverReports.map((r) => _RecentItem.server(r)).toList();
-    return [...local, ...server].take(5).toList();
-  }
+  List<ReportListItem> get _recentItems =>
+      ReportListItem.merge(_localReports, _serverReports).take(5).toList();
 
   (Color, Color) _statusColors(String status) {
     final theme = FlutterFlowTheme.of(context);
@@ -123,7 +109,6 @@ class _DashboardWidgetState extends State<DashboardWidget> {
       case 'synced':
         return (theme.accent1, theme.success);
       case 'pending':
-      case 'syncing':
         return (theme.accent2, theme.warning);
       case 'draft':
         return (theme.accent3, theme.info);
@@ -214,7 +199,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (pendingCount > 0) _syncBanner(pendingCount),
-                            if (_monthlyTotal != null) _monthlyStatCard(),
+                            if (_summary != null) _summaryCard(),
                             _quickActions(),
                             _recentReportsSection(recentItems),
                           ].divide(SizedBox(height: 24.0)),
@@ -285,52 +270,59 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     );
   }
 
-  Widget _monthlyStatCard() {
+  Widget _summaryCard() {
+    final theme = FlutterFlowTheme.of(context);
+    final summary = _summary!;
+    Widget row(String label, int total, {bool bold = false}) => Padding(
+          padding: EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    style: bold
+                        ? theme.bodyMedium.override(fontWeight: FontWeight.bold)
+                        : theme.bodyMedium),
+              ),
+              Text('$total laporan',
+                  style: theme.bodyMedium.override(fontWeight: FontWeight.bold)),
+            ],
+          ),
+        );
     return Container(
       decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
+        color: theme.secondaryBackground,
         borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(color: FlutterFlowTheme.of(context).alternate),
+        border: Border.all(color: theme.alternate),
       ),
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Container(
-              width: 44.0,
-              height: 44.0,
-              decoration: BoxDecoration(
-                color: FlutterFlowTheme.of(context).accent3,
-                borderRadius: BorderRadius.circular(12.0),
+      padding: EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44.0,
+                height: 44.0,
+                decoration: BoxDecoration(
+                  color: theme.accent3,
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                alignment: Alignment.center,
+                child: Icon(LucideIcons.barChart3, color: theme.info, size: 22.0),
               ),
-              alignment: Alignment.center,
-              child: Icon(LucideIcons.barChart3,
-                  color: FlutterFlowTheme.of(context).info, size: 22.0),
-            ),
-            SizedBox(width: 16.0),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Laporan Bulan Ini',
-                      style: FlutterFlowTheme.of(context)
-                          .bodySmall
-                          .override(
-                              color:
-                                  FlutterFlowTheme.of(context).secondaryText)),
-                  Text('$_monthlyTotal Laporan',
-                      style: FlutterFlowTheme.of(context)
-                          .titleMedium
-                          .override(
-                              font: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold),
-                              color: FlutterFlowTheme.of(context).primaryText,
-                              fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-          ],
-        ),
+              SizedBox(width: 16.0),
+              Text('Ringkasan Laporan',
+                  style: theme.titleMedium.override(
+                      font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+          SizedBox(height: 12.0),
+          row('Nasional', summary.nasional, bold: true),
+          for (final entitas in summary.entitas)
+            row(entitas['nama_entitas']?.toString() ?? '-',
+                (entitas['total'] as num?)?.toInt() ?? 0),
+        ],
       ),
     );
   }
@@ -352,14 +344,14 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             tone: FlutterFlowTheme.of(context).primary,
             icon: Icon(LucideIcons.clipboardList,
                 color: FlutterFlowTheme.of(context).primaryText, size: 24.0),
-            title: 'General Report',
+            title: 'Laporan Baru',
           ),
         ),
       ],
     );
   }
 
-  Widget _recentReportsSection(List<_RecentItem> items) {
+  Widget _recentReportsSection(List<ReportListItem> items) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -411,35 +403,23 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             separatorBuilder: (_, __) => SizedBox(height: 16.0),
             itemBuilder: (context, index) {
               final item = items[index];
-              final (bg, fg) = _statusColors(item.status);
+              final (bg, fg) = _statusColors(item.syncStatus);
               return ReportItemWidget(
-                key: Key('recent_${index}_${item.serverId}'),
-                onTap: () {
-                  if (item.serverId == null) {
-                    context.pushNamed(
-                      FullReportWidget.routeName,
-                      queryParameters: {
-                        'clientId': serializeParam(
-                            item.clientId, ParamType.String),
-                      }.withoutNulls,
-                    );
-                    return;
-                  }
-                  context.pushNamed(
-                    FullReportWidget.routeName,
-                    queryParameters: {
-                      'reportId': serializeParam(
-                          item.serverId.toString(), ParamType.String),
-                    }.withoutNulls,
-                  );
-                },
+                key: Key('recent_${index}_${item.clientId ?? item.serverId}'),
+                onTap: () => context.pushNamed(
+                  FullReportWidget.routeName,
+                  queryParameters: {
+                    if (item.clientId != null)
+                      'clientId': serializeParam(item.clientId, ParamType.String),
+                    if (item.clientId == null)
+                      'reportId': serializeParam(item.serverId, ParamType.String),
+                  }.withoutNulls,
+                ),
                 species: item.species,
-                idCode: item.serverId != null
-                    ? 'REP-${item.serverId}'
-                    : 'Draft',
+                idCode: item.shortId,
                 date: item.date,
                 statusBg: bg,
-                statusLabel: item.status,
+                statusLabel: item.badge,
                 statusText: fg,
               );
             },
@@ -449,55 +429,3 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   }
 }
 
-/// `local_reports.updated_at`/`created_at` are stored as full ISO-8601
-/// timestamps with microsecond precision (e.g. `2026-08-12T02:37:07.723297`)
-/// — far too long to fit `ReportItemWidget`'s single-line date row and the
-/// direct cause of a `RenderFlex` overflow on Beranda for any draft/pending
-/// report. Falls back to the raw string if it doesn't parse (defensive, not
-/// expected to happen — this column is always device-generated).
-String _formatLocalDate(String raw) {
-  final parsed = DateTime.tryParse(raw);
-  return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed) : raw;
-}
-
-class _RecentItem {
-  _RecentItem({
-    required this.species,
-    required this.status,
-    required this.date,
-    this.serverId,
-    this.clientId,
-  });
-
-  factory _RecentItem.local(GetAllLocalReportsRow row) {
-    final status = row.syncStatus.isEmpty
-        ? 'Draft'
-        : '${row.syncStatus[0].toUpperCase()}${row.syncStatus.substring(1)}';
-    return _RecentItem(
-      species: 'Draf laporan',
-      status: status,
-      date: _formatLocalDate(row.updatedAt ?? row.createdAt),
-      serverId: row.serverId,
-      clientId: row.clientId,
-    );
-  }
-
-  factory _RecentItem.server(Map<String, dynamic> report) {
-    final species = report['species'];
-    final speciesName = species is Map && species['species_name'] != null
-        ? species['species_name'].toString()
-        : (report['species_name'] ?? 'Spesies tidak diketahui').toString();
-    return _RecentItem(
-      species: speciesName,
-      status: 'Synced',
-      date: (report['report_date'] ?? '').toString(),
-      serverId: report['id'],
-    );
-  }
-
-  final String species;
-  final String status;
-  final String date;
-  final dynamic serverId;
-  final String? clientId;
-}

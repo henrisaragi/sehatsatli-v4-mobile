@@ -9,12 +9,12 @@ import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/report_card/report_card_widget.dart';
 import '/components/text_field/text_field_widget.dart';
 import '/components/training_mode_banner.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../backend/sqlite/sqlite_manager.dart';
 import '../../core/network/api_client.dart';
+import '../../data/models/report_list_item.dart';
 import '../../data/repositories/master_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import 'report_history_model.dart';
@@ -43,7 +43,6 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   bool _isLoadingFirstPage = true;
   bool _isLoadingMore = false;
   String? _errorMessage;
-  bool _showTraining = false;
 
   @override
   void initState() {
@@ -116,9 +115,9 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
     }
     try {
       final result = await ReportRepository().fetchReports(
-        training: _showTraining,
         page: page,
         token: token,
+        mine: FFAppState().historyFilter == _filterMine,
       );
       if (!mounted) return;
       setState(() {
@@ -154,37 +153,33 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
     await _loadFirstPage();
   }
 
-  List<_HistoryItem> get _combinedItems {
+  static const _filterAll = 'Semua';
+  static const _filterMine = 'Laporan Saya';
+  static const _filterUnsent = 'Belum Terkirim';
+
+  List<ReportListItem> get _combinedItems {
     final query = FFAppState().historySearchQuery.trim().toLowerCase();
     final filter = FFAppState().historyFilter;
-
-    // A local row that's already `synced` and also present in the server
-    // fetch would otherwise show up twice (once with the minimal local
-    // snapshot, once with the richer server copy) — drop the local copy
-    // whenever the server fetch actually returned that report. Rows that
-    // aren't in the server result (offline, fetch failed, or just not synced
-    // yet) still show from local data.
-    final serverIds = _serverReports.map((r) => _asInt(r['id'])).whereType<int>().toSet();
-    final local = _localReports
-        .where((r) => r.serverId == null || !serverIds.contains(r.serverId))
-        .map((r) => _HistoryItem.local(r))
+    final items = filter == _filterUnsent
+        ? _localReports
+            .where((r) => r.syncStatus != 'synced')
+            .map(ReportListItem.local)
+            .toList()
+        : ReportListItem.merge(_localReports, _serverReports);
+    return items
+        .where((item) => query.isEmpty || item.species.toLowerCase().contains(query))
         .toList();
-    final server = _serverReports.map((r) => _HistoryItem.server(r)).toList();
-    final all = [...local, ...server];
+  }
 
-    return all.where((item) {
-      if (query.isNotEmpty && !item.species.toLowerCase().contains(query)) {
-        return false;
-      }
-      if (filter == 'All') return true;
-      return item.status.toLowerCase() == filter.toLowerCase();
-    }).toList();
+  void _selectFilter(String label) {
+    setState(() => FFAppState().historyFilter = label);
+    _loadFirstPage();
   }
 
   Widget _filterChip(String label) {
     final active = FFAppState().historyFilter == label;
     return InkWell(
-      onTap: () => setState(() => FFAppState().historyFilter = label),
+      onTap: () => _selectFilter(label),
       borderRadius: BorderRadius.circular(999.0),
       child: Container(
         padding: EdgeInsetsDirectional.fromSTEB(16.0, 8.0, 16.0, 8.0),
@@ -252,24 +247,6 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
-                        FlutterFlowIconButton(
-                          borderRadius: 8.0,
-                          buttonSize: 40.0,
-                          fillColor: _showTraining
-                              ? FlutterFlowTheme.of(context).accent2
-                              : Colors.transparent,
-                          icon: Icon(
-                            LucideIcons.graduationCap,
-                            color: _showTraining
-                                ? FlutterFlowTheme.of(context).warning
-                                : FlutterFlowTheme.of(context).primaryText,
-                            size: 22.0,
-                          ),
-                          onPressed: () {
-                            setState(() => _showTraining = !_showTraining);
-                            _loadFirstPage();
-                          },
-                        ),
                       ],
                     ),
                     SizedBox(height: 12.0),
@@ -291,13 +268,11 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _filterChip('All'),
+                          _filterChip(_filterAll),
                           SizedBox(width: 8.0),
-                          _filterChip('Draft'),
+                          _filterChip(_filterMine),
                           SizedBox(width: 8.0),
-                          _filterChip('Pending'),
-                          SizedBox(width: 8.0),
-                          _filterChip('Synced'),
+                          _filterChip(_filterUnsent),
                         ],
                       ),
                     ),
@@ -359,33 +334,20 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
                                           FlutterFlowTheme.of(context).primary,
                                       size: 24.0),
                                   species: item.species,
-                                  status: item.status,
+                                  status: item.badge,
                                   date: item.date,
-                                  reportCode: item.reportCode,
-                                  onTap: () {
-                                    if (item.serverId == null) {
-                                      // Not synced yet (draft/pending/failed)
-                                      // — editable via the same Full Report
-                                      // page instead of a dead-end message.
-                                      context.pushNamed(
-                                        FullReportWidget.routeName,
-                                        queryParameters: {
-                                          'clientId': serializeParam(
-                                              item.clientId,
-                                              ParamType.String),
-                                        }.withoutNulls,
-                                      );
-                                      return;
-                                    }
-                                    context.pushNamed(
-                                      FullReportWidget.routeName,
-                                      queryParameters: {
+                                  reportCode: item.shortId,
+                                  onTap: () => context.pushNamed(
+                                    FullReportWidget.routeName,
+                                    queryParameters: {
+                                      if (item.clientId != null)
+                                        'clientId': serializeParam(
+                                            item.clientId, ParamType.String),
+                                      if (item.clientId == null)
                                         'reportId': serializeParam(
-                                            item.serverId.toString(),
-                                            ParamType.String),
-                                      }.withoutNulls,
-                                    );
-                                  },
+                                            item.serverId, ParamType.String),
+                                    }.withoutNulls,
+                                  ),
                                 );
                               },
                             ),
@@ -399,61 +361,3 @@ class _ReportHistoryWidgetState extends State<ReportHistoryWidget> {
   }
 }
 
-/// `local_reports.updated_at`/`created_at` are stored as full ISO-8601
-/// timestamps with microsecond precision — see the identical helper in
-/// `dashboard_widget.dart` for why this is needed (RenderFlex overflow).
-String _formatLocalDate(String raw) {
-  final parsed = DateTime.tryParse(raw);
-  return parsed != null ? dateTimeFormat('yyyy-MM-dd', parsed) : raw;
-}
-
-int? _asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : null);
-
-class _HistoryItem {
-  _HistoryItem({
-    required this.species,
-    required this.status,
-    required this.date,
-    required this.reportCode,
-    this.serverId,
-    this.clientId,
-  });
-
-  factory _HistoryItem.local(GetAllLocalReportsRow row) {
-    final status = row.syncStatus.isEmpty
-        ? 'Draft'
-        : '${row.syncStatus[0].toUpperCase()}${row.syncStatus.substring(1)}';
-    return _HistoryItem(
-      species: 'Draf laporan',
-      status: status,
-      date: _formatLocalDate(row.updatedAt ?? row.createdAt),
-      reportCode: row.reportCode ?? row.clientId,
-      serverId: row.serverId,
-      clientId: row.clientId,
-    );
-  }
-
-  // Matches the web list at `laporan-umum` (columns: Kode Laporan, Nama
-  // Spesies, Tanggal Laporan) — report code instead of location.
-  factory _HistoryItem.server(Map<String, dynamic> report) {
-    final species = report['species'];
-    final speciesName = species is Map && species['species_name'] != null
-        ? species['species_name'].toString()
-        : (report['species_name'] ?? 'Spesies tidak diketahui').toString();
-    final isProtected = species is Map && species['protected'] == true;
-    return _HistoryItem(
-      species: speciesName,
-      status: isProtected ? 'Prioritas' : 'Synced',
-      date: (report['report_date'] ?? '').toString(),
-      reportCode: (report['report_code'] ?? '-').toString(),
-      serverId: report['id'],
-    );
-  }
-
-  final String species;
-  final String status;
-  final String date;
-  final String reportCode;
-  final dynamic serverId;
-  final String? clientId;
-}
