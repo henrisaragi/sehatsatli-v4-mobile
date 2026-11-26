@@ -23,7 +23,11 @@ void main() async {
   usePathUrlStrategy();
 
   await initFirebase();
-  await PushService.instance.init();
+  try {
+    await PushService.instance.init();
+  } catch (_) {
+    // Push is optional; a failure here must never keep the app from starting.
+  }
 
   await SQLiteManager.initialize();
   await FlutterFlowTheme.initialize();

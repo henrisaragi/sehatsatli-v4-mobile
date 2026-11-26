@@ -48,7 +48,20 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
     _checkPersistedSession();
   }
 
+  /// Any failure while restoring the session falls back to the login form;
+  /// the splash must never be left spinning.
   Future<void> _checkPersistedSession() async {
+    try {
+      await _restoreSession();
+    } catch (_) {
+      FFAppState().clearSession();
+      if (!mounted) return;
+      _model.isCheckingSession = false;
+      safeSetState(() {});
+    }
+  }
+
+  Future<void> _restoreSession() async {
     // First launch: explain and request device permissions before login.
     if (!await PermissionConsent.isCompleted()) {
       if (!mounted) return;

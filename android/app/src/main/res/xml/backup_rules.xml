@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower. The secure-storage file is encrypted with a Keystore
+     key that is never backed up, so a restored copy can't be decrypted. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+</full-backup-content>
