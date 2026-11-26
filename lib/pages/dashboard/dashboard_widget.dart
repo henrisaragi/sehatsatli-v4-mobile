@@ -6,7 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '/components/action_card/action_card_widget.dart';
 import '/components/button/button_widget.dart';
 import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
-import '/components/report_item/report_item_widget.dart';
+import '/components/report_card/report_card_widget.dart';
 import '/components/training_mode_banner.dart';
 import '/core/utils/error_bottom_sheet.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -170,20 +170,6 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         serverLoaded: _serverLoaded,
         userId: (FFAppState().currentUser as Map?)?['id']?.toString(),
       ).take(5).toList();
-
-  (Color, Color) _statusColors(String status) {
-    final theme = FlutterFlowTheme.of(context);
-    switch (status.toLowerCase()) {
-      case 'synced':
-        return (theme.accent1, theme.success);
-      case 'pending':
-        return (theme.accent2, theme.warning);
-      case 'draft':
-        return (theme.accent3, theme.info);
-      default:
-        return (theme.accent4, theme.error);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +360,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                 model: _model.buttonModel1,
                 updateCallback: () => safeSetState(() {}),
                 child: ButtonWidget(
-                  content: 'Sync Now',
+                  content: 'Kirim',
                   variant: 'secondary',
                   size: 'small',
                   fullWidth: false,
@@ -392,19 +378,24 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   Widget _summaryCard() {
     final theme = FlutterFlowTheme.of(context);
     final summary = _summary!;
-    Widget row(String label, int total, {bool bold = false}) => Padding(
-          padding: EdgeInsets.symmetric(vertical: 4.0),
+    Widget row(String label, int total) => Padding(
+          padding: EdgeInsets.symmetric(vertical: 10.0),
           child: Row(
             children: [
               Expanded(
                 child: Text(label,
-                    style: bold
-                        ? theme.bodyMedium.override(fontWeight: FontWeight.bold)
-                        : theme.bodyMedium),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.bodyMedium.override(
+                        color: theme.primaryText, letterSpacing: 0.0)),
               ),
-              Text('$total laporan',
-                  style:
-                      theme.bodyMedium.override(fontWeight: FontWeight.bold)),
+              SizedBox(width: 12.0),
+              Text('$total',
+                  style: theme.bodyMedium.override(
+                      font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      color: theme.primaryText,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.0)),
             ],
           ),
         );
@@ -414,50 +405,71 @@ class _DashboardWidgetState extends State<DashboardWidget> {
         borderRadius: BorderRadius.circular(12.0),
         border: Border.all(color: theme.alternate),
       ),
-      padding: EdgeInsets.all(16.0),
+      padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 6.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Container(
-                width: 44.0,
-                height: 44.0,
+                width: 40.0,
+                height: 40.0,
                 decoration: BoxDecoration(
                   color: theme.accent3,
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(10.0),
                 ),
                 alignment: Alignment.center,
                 child:
-                    Icon(LucideIcons.barChart3, color: theme.info, size: 22.0),
+                    Icon(LucideIcons.barChart3, color: theme.info, size: 20.0),
               ),
-              SizedBox(width: 16.0),
-              Text('Ringkasan Laporan',
-                  style: theme.titleMedium.override(
-                      font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                      fontWeight: FontWeight.bold)),
+              SizedBox(width: 12.0),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total laporan nasional',
+                        style: theme.bodySmall.override(
+                            color: theme.secondaryText, letterSpacing: 0.0)),
+                    Text('${summary.nasional}',
+                        style: theme.titleLarge.override(
+                            font: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600),
+                            color: theme.primaryText,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.0)),
+                  ],
+                ),
+              ),
             ],
           ),
-          SizedBox(height: 12.0),
-          row('Nasional', summary.nasional, bold: true),
-          for (final entitas in summary.entitas)
-            row(entitas['nama_entitas']?.toString() ?? '-',
-                (entitas['total'] as num?)?.toInt() ?? 0),
+          if (summary.entitas.isNotEmpty) ...[
+            SizedBox(height: 8.0),
+            for (final entitas in summary.entitas) ...[
+              Divider(height: 1.0, thickness: 1.0, color: theme.alternate),
+              row(entitas['nama_entitas']?.toString() ?? '-',
+                  (entitas['total'] as num?)?.toInt() ?? 0),
+            ],
+          ] else
+            SizedBox(height: 10.0),
         ],
       ),
     );
   }
+
+  Widget _sectionTitle(String text) => Text(text,
+      style: FlutterFlowTheme.of(context).titleSmall.override(
+          font: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          color: FlutterFlowTheme.of(context).primaryText,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.0));
 
   Widget _quickActions() {
     final theme = FlutterFlowTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Actions',
-            style: theme.titleMedium.override(
-                font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                fontWeight: FontWeight.bold)),
-        SizedBox(height: 16.0),
+        _sectionTitle('Aksi Cepat'),
+        SizedBox(height: 12.0),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,61 +514,60 @@ class _DashboardWidgetState extends State<DashboardWidget> {
   }
 
   Widget _recentReportsSection(List<ReportListItem> items) {
+    final theme = FlutterFlowTheme.of(context);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Recent Reports',
-                style: FlutterFlowTheme.of(context).titleMedium.override(
-                    font: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                    fontWeight: FontWeight.bold)),
-            InkWell(
-              onTap: () => context.goNamed(ReportHistoryWidget.routeName),
-              child: wrapWithModel(
-                model: _model.buttonModel2,
-                updateCallback: () => safeSetState(() {}),
-                child: ButtonWidget(
-                  content: 'View All',
-                  variant: 'ghost',
-                  size: 'small',
-                  fullWidth: false,
-                  loading: false,
-                  disabled: false,
-                ),
+            Expanded(child: _sectionTitle('Laporan Terbaru')),
+            TextButton(
+              onPressed: () => context.goNamed(ReportHistoryWidget.routeName),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.primary,
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                minimumSize: Size(0.0, 36.0),
               ),
+              child: Text('Lihat semua',
+                  style: theme.labelLarge
+                      .override(color: theme.primary, letterSpacing: 0.0)),
             ),
           ],
         ),
-        SizedBox(height: 16.0),
+        SizedBox(height: 8.0),
         if (items.isEmpty)
-          Padding(
-            padding: EdgeInsets.all(24.0),
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
+            decoration: BoxDecoration(
+              color: theme.secondaryBackground,
+              borderRadius: BorderRadius.circular(12.0),
+              border: Border.all(color: theme.alternate),
+            ),
             child: Column(
               children: [
                 Icon(LucideIcons.history,
-                    color: FlutterFlowTheme.of(context).accent3, size: 48.0),
-                SizedBox(height: 16.0),
-                Text('No recent reports',
-                    style: FlutterFlowTheme.of(context).bodyMedium.override(
-                        color: FlutterFlowTheme.of(context).secondaryText)),
+                    color: theme.secondaryText, size: 36.0),
+                SizedBox(height: 12.0),
+                Text('Belum ada laporan',
+                    style: theme.bodyMedium.override(
+                        color: theme.secondaryText, letterSpacing: 0.0)),
               ],
             ),
           )
         else
-          ListView.separated(
-            padding: EdgeInsets.zero,
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => SizedBox(height: 16.0),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final (bg, fg) = _statusColors(item.syncStatus);
-              return ReportItemWidget(
-                key: Key('recent_${index}_${item.clientId ?? item.serverId}'),
-                onTap: () => context.pushNamed(
+          for (final (index, item) in items.indexed) ...[
+            if (index > 0) SizedBox(height: 12.0),
+            ReportCardWidget(
+              key: Key('recent_${index}_${item.clientId ?? item.serverId}'),
+              icon:
+                  Icon(LucideIcons.pawPrint, color: theme.primary, size: 22.0),
+              species: item.species,
+              status: item.badge,
+              syncStatus: item.syncStatus,
+              date: item.date,
+              reportCode: item.shortId,
+              onTap: () async {
+                await context.pushNamed(
                   FullReportWidget.routeName,
                   queryParameters: {
                     if (item.clientId != null)
@@ -566,16 +577,11 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                       'reportId':
                           serializeParam(item.serverId, ParamType.String),
                   }.withoutNulls,
-                ),
-                species: item.species,
-                idCode: item.shortId,
-                date: item.date,
-                statusBg: bg,
-                statusLabel: item.badge,
-                statusText: fg,
-              );
-            },
-          ),
+                );
+                if (mounted) _load();
+              },
+            ),
+          ],
       ],
     );
   }

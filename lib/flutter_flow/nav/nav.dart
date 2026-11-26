@@ -46,6 +46,8 @@ Set<String> get _kPublicRoutePaths => {
       // Pre-auth steps of the v4 login/registration flow (no token yet).
       OtpLoginWidget.routePath,
       RegisterUptWidget.routePath,
+      PermissionConsentWidget.routePath,
+      PrivacyPolicyWidget.routePath,
     };
 
 GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
@@ -68,6 +70,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: '_initialize',
           path: '/',
           builder: (context, _) => SplashAuthWidget(),
+        ),
+        FFRoute(
+          name: PermissionConsentWidget.routeName,
+          path: PermissionConsentWidget.routePath,
+          builder: (context, params) => PermissionConsentWidget(),
         ),
         FFRoute(
           name: ForgotPasswordWidget.routeName,

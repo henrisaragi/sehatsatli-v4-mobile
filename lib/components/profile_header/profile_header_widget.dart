@@ -154,9 +154,11 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: FlutterFlowTheme.of(context)
-                                  .secondaryBackground,
+                                  .primaryBackground,
                               borderRadius: BorderRadius.circular(9999.0),
-                              shape: BoxShape.rectangle,
+                              border: Border.all(
+                                  color:
+                                      FlutterFlowTheme.of(context).alternate),
                             ),
                             child: Padding(
                               padding: EdgeInsetsDirectional.fromSTEB(
@@ -302,7 +304,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                 alignment: AlignmentDirectional(0.0, 0.0),
                 child: Icon(
                   LucideIcons.camera,
-                  color: FlutterFlowTheme.of(context).info,
+                  color: FlutterFlowTheme.of(context).onPrimary,
                   size: 14.0,
                 ),
               ),

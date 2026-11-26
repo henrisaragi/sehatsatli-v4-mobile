@@ -50,11 +50,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>SehatSatli needs camera access to photograph wildlife health case evidence.</string>
+	<string>SehatSatli memerlukan akses kamera untuk memotret satwa, kondisi lapangan, dan barang bukti yang dilampirkan pada laporan kasus kesehatan satwa liar.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SehatSatli needs your location to record where a wildlife case was found.</string>
+	<string>SehatSatli memerlukan lokasi Anda saat aplikasi digunakan untuk mengisi koordinat GPS lokasi kejadian kasus satwa liar secara otomatis. Lokasi tidak dilacak di latar belakang.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SehatSatli needs photo library access to attach existing photos to a case report.</string>
+	<string>SehatSatli memerlukan akses galeri foto untuk melampirkan foto yang Anda pilih ke laporan kasus kesehatan satwa liar.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

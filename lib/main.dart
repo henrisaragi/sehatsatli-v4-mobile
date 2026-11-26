@@ -93,6 +93,8 @@ class _MyAppState extends State<MyApp> {
     _router = createRouter(_appStateNotifier);
   }
 
+  ThemeMode get themeMode => _themeMode;
+
   void setThemeMode(ThemeMode mode) => safeSetState(() {
         _themeMode = mode;
         FlutterFlowTheme.saveThemeMode(mode);
@@ -110,14 +112,8 @@ class _MyAppState extends State<MyApp> {
       ],
       locale: const Locale('id', ''),
       supportedLocales: const [Locale('id', '')],
-      theme: ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: false,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: false,
-      ),
+      theme: FlutterFlowTheme.materialTheme(Brightness.light),
+      darkTheme: FlutterFlowTheme.materialTheme(Brightness.dark),
       themeMode: _themeMode,
       routerConfig: _router,
     );

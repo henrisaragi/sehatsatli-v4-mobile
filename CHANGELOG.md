@@ -31,10 +31,17 @@ Full migration to backend v4 (`sehatsatli-v4`). Requires that backend's
 
 ### Added
 - Self-service UPT staff registration and registration status page.
-- "Sinkron" tab (the Sync Manager) in place of Notifikasi.
+- "Sinkron" tab (the Sync Manager).
+- In-app notifications (bell + badge, `notifikasi` list) and FCM push; tapping opens the report.
+- First-launch device permission consent page (camera, location while in use, notifications).
+  Gallery uses the Android Photo Picker, so `READ_MEDIA_IMAGES`/`READ_EXTERNAL_STORAGE` are gone.
+- Light/dark/system theme picker on the profile page.
+
+### Fixed
+- Sync Manager reloads when a background sync (on reconnect) finishes.
 
 ### Removed
-- Features with no v4 endpoint: community reports, notification inbox, profile edit/photo upload,
+- Features with no v4 endpoint: community reports, profile edit/photo upload,
   in-session password change, and deleting reports that already reached the server.
   They can be restored from tag `v1.1.1`.
 

@@ -422,26 +422,9 @@ class _TextFieldWidgetState extends State<TextFieldWidget> {
                                     .bodyMedium
                                     .fontStyle,
                               ),
-                              color: valueOrDefault<Color>(
-                                () {
-                                  if (valueOrDefault<String>(
-                                        widget!.variant,
-                                        'filled',
-                                      ) ==
-                                      'filled') {
-                                    return FlutterFlowTheme.of(context).accent3;
-                                  } else if (valueOrDefault<String>(
-                                        widget!.variant,
-                                        'filled',
-                                      ) ==
-                                      'ghost') {
-                                    return FlutterFlowTheme.of(context).accent3;
-                                  } else {
-                                    return FlutterFlowTheme.of(context).accent3;
-                                  }
-                                }(),
-                                FlutterFlowTheme.of(context).accent3,
-                              ),
+                              color: FlutterFlowTheme.of(context)
+                                  .secondaryText
+                                  .withValues(alpha: 0.7),
                               letterSpacing: 0.0,
                               fontWeight: FlutterFlowTheme.of(context)
                                   .bodyMedium

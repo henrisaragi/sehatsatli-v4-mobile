@@ -26,6 +26,61 @@ abstract class FlutterFlowTheme {
       ? _prefs?.remove(kThemeModeKey)
       : _prefs?.setBool(kThemeModeKey, mode == ThemeMode.dark);
 
+  /// Material theme for widgets that don't read FlutterFlowTheme directly
+  /// (dialogs, bottom sheets, pickers, snackbars, ink/hover, default text).
+  static ThemeData materialTheme(Brightness brightness) {
+    final t =
+        brightness == Brightness.dark ? DarkModeTheme() : LightModeTheme();
+    final isDark = brightness == Brightness.dark;
+    final hover = t.primaryText.withValues(alpha: isDark ? 0.06 : 0.04);
+    return ThemeData(
+      brightness: brightness,
+      useMaterial3: false,
+      colorScheme: ColorScheme(
+        brightness: brightness,
+        primary: t.primary,
+        onPrimary: t.onPrimary,
+        secondary: t.secondary,
+        onSecondary: t.onSecondary,
+        error: t.error,
+        onError: t.onError,
+        surface: t.secondaryBackground,
+        onSurface: t.primaryText,
+      ),
+      primaryColor: t.primary,
+      scaffoldBackgroundColor: t.primaryBackground,
+      canvasColor: t.primaryBackground,
+      cardColor: t.secondaryBackground,
+      dividerColor: t.alternate,
+      hoverColor: hover,
+      highlightColor: hover,
+      splashColor: t.primaryText.withValues(alpha: isDark ? 0.08 : 0.06),
+      focusColor: t.primary.withValues(alpha: 0.12),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: t.primary,
+        selectionColor: t.primary.withValues(alpha: 0.3),
+        selectionHandleColor: t.primary,
+      ),
+      textTheme: ThemeData(brightness: brightness)
+          .textTheme
+          .apply(bodyColor: t.primaryText, displayColor: t.primaryText),
+      iconTheme: IconThemeData(color: t.primaryText),
+      dialogTheme: DialogThemeData(backgroundColor: t.secondaryBackground),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: t.secondaryBackground,
+        modalBackgroundColor: t.secondaryBackground,
+      ),
+      popupMenuTheme: PopupMenuThemeData(color: t.secondaryBackground),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: isDark ? t.surfaceVariant : const Color(0xFF343A40),
+        contentTextStyle:
+            TextStyle(color: isDark ? t.primaryText : Colors.white),
+        actionTextColor: t.primary,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: t.primary),
+    );
+  }
+
   static FlutterFlowTheme of(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? DarkModeTheme()
@@ -400,6 +455,10 @@ class ThemeTypography extends Typography {
       );
 }
 
+/// Zinc-based dark palette (neutral greys, no blue tint): near-black page,
+/// raised cards, lighter hover/selected surfaces. Brand hues are lifted a
+/// little so text and icons keep contrast on dark surfaces; tinted badge
+/// backgrounds are translucent so they work on any surface.
 class DarkModeTheme extends FlutterFlowTheme {
   @Deprecated('Use primary instead')
   Color get primaryColor => primary;
@@ -409,35 +468,35 @@ class DarkModeTheme extends FlutterFlowTheme {
   Color get tertiaryColor => tertiary;
 
   late Color primary = const Color(0xFF17B273);
-  late Color secondary = const Color(0xFFE67E22);
-  late Color tertiary = const Color(0xFF3498DB);
-  late Color alternate = const Color(0xFF1E293B);
-  late Color primaryText = const Color(0xFFF8FAFC);
-  late Color secondaryText = const Color(0xFF94A3B8);
-  late Color primaryBackground = const Color(0xFF0F172A);
-  late Color secondaryBackground = const Color(0xFF1E293B);
-  late Color accent1 = const Color(0x00000000);
-  late Color accent2 = const Color(0x00000000);
-  late Color accent3 = const Color(0xFF64748B);
-  late Color accent4 = const Color(0x00000000);
-  late Color success = const Color(0xFF2ECC71);
-  late Color warning = const Color(0xFFF39C12);
-  late Color error = const Color(0xFFE74C3C);
-  late Color info = const Color(0xFF3498DB);
+  late Color secondary = const Color(0xFFF0903E);
+  late Color tertiary = const Color(0xFF4FA3E0);
+  late Color alternate = const Color(0xFF2A2A2E);
+  late Color primaryText = const Color(0xFFF4F4F5);
+  late Color secondaryText = const Color(0xFFA1A1AA);
+  late Color primaryBackground = const Color(0xFF0B0B0D);
+  late Color secondaryBackground = const Color(0xFF18181B);
+  late Color accent1 = const Color(0x2617B273);
+  late Color accent2 = const Color(0x26F0903E);
+  late Color accent3 = const Color(0x264FA3E0);
+  late Color accent4 = const Color(0x26E5484D);
+  late Color success = const Color(0xFF2ECC8F);
+  late Color warning = const Color(0xFFF0903E);
+  late Color error = const Color(0xFFE5484D);
+  late Color info = const Color(0xFF4FA3E0);
 
   late Color onPrimary = const Color(0xFFFFFFFF);
-  late Color primaryContainer = const Color(0x2417B273);
-  late Color onPrimaryContainer = const Color(0xFFF8FAFC);
+  late Color primaryContainer = const Color(0x2617B273);
+  late Color onPrimaryContainer = const Color(0xFFF4F4F5);
   late Color onSecondary = const Color(0xFFFFFFFF);
-  late Color secondaryContainer = const Color(0x24E67E22);
-  late Color onSecondaryContainer = const Color(0xFFF8FAFC);
+  late Color secondaryContainer = const Color(0x26F0903E);
+  late Color onSecondaryContainer = const Color(0xFFF4F4F5);
   late Color onAccent = const Color(0xFFFFFFFF);
-  late Color accentContainer = const Color(0x243498DB);
-  late Color onAccentContainer = const Color(0xFFF8FAFC);
-  late Color onBackground = const Color(0xFFF8FAFC);
-  late Color onSurface = const Color(0xFFF8FAFC);
-  late Color surfaceVariant = const Color(0xFF0F2922);
-  late Color onSurfaceVariant = const Color(0xFF94A3B8);
+  late Color accentContainer = const Color(0x264FA3E0);
+  late Color onAccentContainer = const Color(0xFFF4F4F5);
+  late Color onBackground = const Color(0xFFF4F4F5);
+  late Color onSurface = const Color(0xFFF4F4F5);
+  late Color surfaceVariant = const Color(0xFF27272A);
+  late Color onSurfaceVariant = const Color(0xFFA1A1AA);
   late Color onSuccess = const Color(0xFFFFFFFF);
   late Color onWarning = const Color(0xFFFFFFFF);
   late Color onError = const Color(0xFFFFFFFF);
@@ -449,20 +508,20 @@ class DarkModeTheme extends FlutterFlowTheme {
   late Color onPrimary50 = const Color(0x80FFFFFF);
   late Color onPrimary30 = const Color(0x4DFFFFFF);
   late Color onPrimary80 = const Color(0xCCFFFFFF);
-  late Color onSurface50 = const Color(0x80F8FAFC);
+  late Color onSurface50 = const Color(0x80F4F4F5);
   late Color onPrimary10 = const Color(0x1AFFFFFF);
   late Color onPrimary70 = const Color(0xB3FFFFFF);
   late Color fullContrast10 = const Color(0x1AFFFFFF);
   late Color fullContrast80 = const Color(0xCCFFFFFF);
-  late Color secondary30 = const Color(0x4DE67E22);
-  late Color info20 = const Color(0x333498DB);
-  late Color secondary20 = const Color(0x33E67E22);
-  late Color primary10 = const Color(0x1A17B273);
+  late Color secondary30 = const Color(0x4DF0903E);
+  late Color info20 = const Color(0x334FA3E0);
+  late Color secondary20 = const Color(0x33F0903E);
+  late Color primary10 = const Color(0x2617B273);
   late Color onPrimary20 = const Color(0x33FFFFFF);
-  late Color onBackground90 = const Color(0xE6F8FAFC);
-  late Color success10 = const Color(0x1A2ECC71);
-  late Color success50 = const Color(0x802ECC71);
-  late Color surface50 = const Color(0x801E293B);
+  late Color onBackground90 = const Color(0xE6F4F4F5);
+  late Color success10 = const Color(0x1A2ECC8F);
+  late Color success50 = const Color(0x802ECC8F);
+  late Color surface50 = const Color(0x8018181B);
 }
 
 class FFDesignTokens {

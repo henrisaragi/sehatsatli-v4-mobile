@@ -1,24 +1,23 @@
-import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
-import '/components/action_card/action_card_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+
+import '/backend/sqlite/sqlite_manager.dart';
 import '/components/button/button_widget.dart';
+import '/components/main_bottom_nav/main_bottom_nav_widget.dart';
 import '/components/profile_header/profile_header_widget.dart';
 import '/components/settings_item/settings_item_widget.dart';
-import '/components/storage_stat/storage_stat_widget.dart';
-import '/components/switch_component/switch_component_widget.dart';
 import '/components/training_mode_banner.dart';
-import '../../core/network/api_client.dart';
+import '/core/network/api_client.dart';
 import '/data/models/user_profile_fields.dart';
 import '/data/repositories/auth_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import 'dart:ui';
 import '/index.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '/main.dart';
 import 'user_profile_settings_model.dart';
 export 'user_profile_settings_model.dart';
 
@@ -38,11 +37,29 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  /// NIP, jabatan and UPT live on the UPT registration, not on `GET user`.
+  RegistrationStatusResult? _registration;
+
+  /// Local reports queued or rejected; null until counted (or on web).
+  int? _unsentCount;
+  String? _version;
+  bool _loggingOut = false;
+
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => UserProfileSettingsModel());
     _refreshProfile();
+    _countUnsent();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = info.version);
+    });
+  }
+
+  @override
+  void dispose() {
+    _model.dispose();
+    super.dispose();
   }
 
   /// Best-effort refresh against `GET user`; keeps the cached snapshot when
@@ -64,8 +81,26 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
     }
   }
 
-  /// NIP, jabatan and UPT live on the UPT registration, not on `GET user`.
-  RegistrationStatusResult? _registration;
+  Future<void> _countUnsent() async {
+    if (kIsWeb) return;
+    try {
+      final rows = await SQLiteManager.instance.getAllLocalReports();
+      final count = rows
+          .where((r) => r.syncStatus == 'pending' || r.syncStatus == 'failed')
+          .length;
+      if (mounted) setState(() => _unsentCount = count);
+    } catch (_) {
+      // sqflite unavailable — just omit the count.
+    }
+  }
+
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+    await AuthRepository().logout();
+    FFAppState().clearSession();
+    if (!mounted) return;
+    context.goNamed(SplashAuthWidget.routeName);
+  }
 
   Map<String, dynamic>? _currentUserMap() {
     final user = FFAppState().currentUser;
@@ -73,638 +108,206 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
   }
 
   @override
-  void dispose() {
-    _model.dispose();
+  Widget build(BuildContext context) {
+    context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final fields = UserProfileFields(_currentUserMap());
+    final unsent = _unsentCount;
 
-    super.dispose();
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: theme.primaryBackground,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            TrainingModeBanner(),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.only(bottom: 24.0),
+                children: [
+                  wrapWithModel(
+                    model: _model.profileHeaderModel,
+                    updateCallback: () => safeSetState(() {}),
+                    child: ProfileHeaderWidget(
+                      name: fields.name,
+                      role: _registration?.jabatan ?? fields.role,
+                      nip: _registration?.nip ?? '-',
+                      institution: _registration?.upt?['nama']?.toString(),
+                    ),
+                  ),
+                  _section('Tampilan', [
+                    Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: _ThemeModeSelector(),
+                    ),
+                  ]),
+                  _section('Sinkronisasi', [
+                    SettingsItemWidget(
+                      icon: LucideIcons.refreshCw,
+                      iconColor: theme.primary,
+                      title: 'Sync Manager',
+                      subtitle: unsent == null
+                          ? 'Antrean laporan yang akan dikirim'
+                          : unsent == 0
+                              ? 'Semua laporan sudah terkirim'
+                              : '$unsent laporan menunggu dikirim',
+                      onTap: () => context.goNamed(SyncManagerWidget.routeName),
+                    ),
+                  ]),
+                  _section('Informasi', [
+                    SettingsItemWidget(
+                      icon: LucideIcons.shieldCheck,
+                      title: 'Kebijakan Privasi',
+                      subtitle: 'Pengelolaan dan keamanan data',
+                      onTap: () =>
+                          context.pushNamed(PrivacyPolicyWidget.routeName),
+                    ),
+                  ]),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20.0, 32.0, 20.0, 0.0),
+                    child: InkWell(
+                      onTap: _loggingOut ? null : _logout,
+                      borderRadius: BorderRadius.circular(10.0),
+                      child: wrapWithModel(
+                        model: _model.logoutButtonModel,
+                        updateCallback: () => safeSetState(() {}),
+                        child: ButtonWidget(
+                          icon: Icon(LucideIcons.logOut,
+                              color: theme.onError, size: 20.0),
+                          iconPresent: true,
+                          content: 'Keluar',
+                          variant: 'destructive',
+                          size: 'medium',
+                          fullWidth: true,
+                          loading: _loggingOut,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16.0),
+                  Text(
+                    _version == null ? 'SehatSatli' : 'SehatSatli v$_version',
+                    textAlign: TextAlign.center,
+                    style: theme.bodySmall.override(
+                        color: theme.secondaryText, letterSpacing: 0.0),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: MainBottomNavWidget(currentTab: MainTab.profil),
+    );
   }
+
+  /// Uppercase caption over a bordered card holding [children], separated
+  /// by hairline dividers.
+  Widget _section(String title, List<Widget> children) {
+    final theme = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.0, 24.0, 20.0, 0.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 4.0, bottom: 8.0),
+            child: Text(
+              title.toUpperCase(),
+              style: theme.labelSmall.override(
+                font: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                color: theme.secondaryText,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          Material(
+            color: theme.secondaryBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              side: BorderSide(color: theme.alternate),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children.divide(
+                  Divider(height: 1.0, thickness: 1.0, color: theme.alternate)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Terang / Gelap / Sistem pill selector; persisted by [MyApp.setThemeMode].
+class _ThemeModeSelector extends StatefulWidget {
+  @override
+  State<_ThemeModeSelector> createState() => _ThemeModeSelectorState();
+}
+
+class _ThemeModeSelectorState extends State<_ThemeModeSelector> {
+  static const _options = [
+    (ThemeMode.light, LucideIcons.sun, 'Terang'),
+    (ThemeMode.dark, LucideIcons.moon, 'Gelap'),
+    (ThemeMode.system, LucideIcons.smartphone, 'Sistem'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    context.watch<FFAppState>();
-    final fields = UserProfileFields(_currentUserMap());
-
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              Container(
-                width: 0.0,
-                height: 0.0,
-              ),
-              TrainingModeBanner(),
-              Expanded(
-                child: Container(
-                  child: SingleChildScrollView(
-                    primary: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final theme = FlutterFlowTheme.of(context);
+    final current = MyApp.of(context).themeMode;
+    return Container(
+      padding: EdgeInsets.all(4.0),
+      decoration: BoxDecoration(
+        color: theme.primaryBackground,
+        borderRadius: BorderRadius.circular(10.0),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Row(
+        children: [
+          for (final (mode, icon, label) in _options)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: mode == current,
+                child: InkWell(
+                  // setState too: Gelap → Sistem on a dark phone changes no
+                  // inherited theme, so nothing else would rebuild this.
+                  onTap: () =>
+                      setState(() => setDarkModeSetting(context, mode)),
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: AnimatedContainer(
+                    duration: Duration(milliseconds: 150),
+                    padding: EdgeInsets.symmetric(vertical: 10.0),
+                    decoration: BoxDecoration(
+                      color: mode == current
+                          ? theme.secondaryBackground
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8.0),
+                      border: Border.all(
+                          color: mode == current
+                              ? theme.alternate
+                              : Colors.transparent),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        wrapWithModel(
-                          model: _model.profileHeaderModel,
-                          updateCallback: () => safeSetState(() {}),
-                          child: ProfileHeaderWidget(
-                            name: fields.name,
-                            role: _registration?.jabatan ?? fields.role,
-                            nip: _registration?.nip ?? '-',
-                            institution:
-                                _registration?.upt?['nama']?.toString(),
-                          ),
-                        ),
-                        Container(
-                          child: Padding(
-                            padding: EdgeInsets.all(24.0),
-                            child: Container(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Storage Management',
-                                    style: FlutterFlowTheme.of(context)
-                                        .titleMedium
-                                        .override(
-                                          font: GoogleFonts.poppins(
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .titleMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.bold,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .titleMedium
-                                                  .fontStyle,
-                                          lineHeight: 1.35,
-                                        ),
-                                  ),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: FlutterFlowTheme.of(context)
-                                          .secondaryBackground,
-                                      borderRadius: BorderRadius.circular(12.0),
-                                      shape: BoxShape.rectangle,
-                                      border: Border.all(
-                                        color: FlutterFlowTheme.of(context)
-                                            .alternate,
-                                        width: 1.0,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(24.0),
-                                      child: Container(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.start,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.start,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.center,
-                                              children: [
-                                                Expanded(
-                                                  flex: 1,
-                                                  child: wrapWithModel(
-                                                    model: _model
-                                                        .storageStatModel1,
-                                                    updateCallback: () =>
-                                                        safeSetState(() {}),
-                                                    child: StorageStatWidget(
-                                                      label: 'Local Reports',
-                                                      value: '12 Drafts',
-                                                      progress: 0.4,
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .secondary,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 1,
-                                                  child: wrapWithModel(
-                                                    model: _model
-                                                        .storageStatModel2,
-                                                    updateCallback: () =>
-                                                        safeSetState(() {}),
-                                                    child: StorageStatWidget(
-                                                      label: 'Photo Cache',
-                                                      value: '128 MB',
-                                                      progress: 0.65,
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ].divide(SizedBox(width: 24.0)),
-                                            ),
-                                            Divider(
-                                              height: 16.0,
-                                              thickness: 1.0,
-                                              indent: 0.0,
-                                              endIndent: 0.0,
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .alternate,
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.center,
-                                              children: [
-                                                Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.start,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.center,
-                                                  children: [
-                                                    Text(
-                                                      'Database Status',
-                                                      style:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .labelSmall
-                                                              .override(
-                                                                font:
-                                                                    GoogleFonts
-                                                                        .inter(
-                                                                  fontWeight: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .labelSmall
-                                                                      .fontWeight,
-                                                                  fontStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .labelSmall
-                                                                      .fontStyle,
-                                                                ),
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .secondaryText,
-                                                                letterSpacing:
-                                                                    0.0,
-                                                                fontWeight: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelSmall
-                                                                    .fontWeight,
-                                                                fontStyle: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelSmall
-                                                                    .fontStyle,
-                                                                lineHeight:
-                                                                    1.27,
-                                                              ),
-                                                    ),
-                                                    Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.max,
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .start,
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .center,
-                                                      children: [
-                                                        Container(
-                                                          width: 8.0,
-                                                          height: 8.0,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .success,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        9999.0),
-                                                            shape: BoxShape
-                                                                .rectangle,
-                                                          ),
-                                                        ),
-                                                        Text(
-                                                          'Healthy & Encrypted',
-                                                          style: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .bodySmall
-                                                              .override(
-                                                                font:
-                                                                    GoogleFonts
-                                                                        .inter(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  fontStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .fontStyle,
-                                                                ),
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .success,
-                                                                letterSpacing:
-                                                                    0.0,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                                fontStyle: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodySmall
-                                                                    .fontStyle,
-                                                                lineHeight:
-                                                                    1.38,
-                                                              ),
-                                                        ),
-                                                      ].divide(
-                                                          SizedBox(width: 4.0)),
-                                                    ),
-                                                  ].divide(
-                                                      SizedBox(height: 4.0)),
-                                                ),
-                                                wrapWithModel(
-                                                  model: _model.buttonModel1,
-                                                  updateCallback: () =>
-                                                      safeSetState(() {}),
-                                                  child: ButtonWidget(
-                                                    icon: Icon(
-                                                      LucideIcons.hardDrive,
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primaryText,
-                                                      size: 24.0,
-                                                    ),
-                                                    iconPresent: true,
-                                                    iconEndPresent: false,
-                                                    content: 'Optimize DB',
-                                                    variant: 'outline',
-                                                    size: 'small',
-                                                    fullWidth: false,
-                                                    loading: false,
-                                                    disabled: false,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ].divide(SizedBox(height: 24.0)),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ].divide(SizedBox(height: 16.0)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(
-                              32.0, 0.0, 32.0, 0.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                child: Padding(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      16.0, 24.0, 16.0, 8.0),
-                                  child: Container(
-                                    child: Text(
-                                      'Account',
-                                      style: FlutterFlowTheme.of(context)
-                                          .labelLarge
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight: FontWeight.bold,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelLarge
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            letterSpacing: 0.0,
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                            lineHeight: 1.33,
-                                          ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                child: Padding(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      16.0, 24.0, 16.0, 8.0),
-                                  child: Container(
-                                    child: Text(
-                                      'System & Sync',
-                                      style: FlutterFlowTheme.of(context)
-                                          .labelLarge
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight: FontWeight.bold,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelLarge
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            letterSpacing: 0.0,
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                            lineHeight: 1.33,
-                                          ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              wrapWithModel(
-                                model: _model.settingsItemModel3,
-                                updateCallback: () => safeSetState(() {}),
-                                child: SettingsItemWidget(
-                                  onTap: () => context
-                                      .goNamed(SyncManagerWidget.routeName),
-                                  iconBg: FlutterFlowTheme.of(context)
-                                      .surfaceVariant,
-                                  icon: Icon(
-                                    LucideIcons.refreshCw,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 20.0,
-                                  ),
-                                  title: 'Sync Manager',
-                                  subtitle:
-                                      'Manage queue and background sync intervals',
-                                ),
-                              ),
-                              wrapWithModel(
-                                model: _model.settingsItemModel4,
-                                updateCallback: () => safeSetState(() {}),
-                                child: SettingsItemWidget(
-                                  onTap: () => showSnackbar(
-                                      context, 'Offline Maps coming soon'),
-                                  iconBg: FlutterFlowTheme.of(context)
-                                      .surfaceVariant,
-                                  icon: Icon(
-                                    LucideIcons.cloudDownload,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 20.0,
-                                  ),
-                                  title: 'Offline Maps',
-                                  subtitle:
-                                      'Download regional maps for offline field work',
-                                ),
-                              ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: FlutterFlowTheme.of(context)
-                                      .secondaryBackground,
-                                  shape: BoxShape.rectangle,
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      24.0, 16.0, 24.0, 16.0),
-                                  child: Container(
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.max,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.start,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 40.0,
-                                          height: 40.0,
-                                          decoration: BoxDecoration(
-                                            color: FlutterFlowTheme.of(context)
-                                                .surfaceVariant,
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                            shape: BoxShape.rectangle,
-                                          ),
-                                          alignment:
-                                              AlignmentDirectional(0.0, 0.0),
-                                          child: Icon(
-                                            LucideIcons.wifiOff,
-                                            color: FlutterFlowTheme.of(context)
-                                                .primaryText,
-                                            size: 20.0,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: wrapWithModel(
-                                            model: _model.switchModel,
-                                            updateCallback: () =>
-                                                safeSetState(() {}),
-                                            child: SwitchComponentWidget(
-                                              label: 'Strict Offline Mode',
-                                              labelPresent: true,
-                                              variant: 'Android',
-                                              active: FFAppState()
-                                                  .strictOfflineMode,
-                                            ),
-                                          ),
-                                        ),
-                                      ].divide(SizedBox(width: 16.0)),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                child: Padding(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      16.0, 24.0, 16.0, 8.0),
-                                  child: Container(
-                                    child: Text(
-                                      'Support',
-                                      style: FlutterFlowTheme.of(context)
-                                          .labelLarge
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight: FontWeight.bold,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelLarge
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            letterSpacing: 0.0,
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                            lineHeight: 1.33,
-                                          ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              wrapWithModel(
-                                model: _model.settingsItemModel5,
-                                updateCallback: () => safeSetState(() {}),
-                                child: SettingsItemWidget(
-                                  onTap: () => showSnackbar(
-                                      context, 'Help Center coming soon'),
-                                  iconBg: FlutterFlowTheme.of(context)
-                                      .surfaceVariant,
-                                  icon: Icon(
-                                    LucideIcons.circleHelp,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 20.0,
-                                  ),
-                                  title: 'Help Center',
-                                  subtitle:
-                                      'Documentation and system usage guides',
-                                ),
-                              ),
-                              wrapWithModel(
-                                model: _model.settingsItemModel6,
-                                updateCallback: () => safeSetState(() {}),
-                                child: SettingsItemWidget(
-                                  onTap: () => context.pushNamed(
-                                      PrivacyPolicyWidget.routeName),
-                                  iconBg: FlutterFlowTheme.of(context)
-                                      .surfaceVariant,
-                                  icon: Icon(
-                                    LucideIcons.fileText,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 20.0,
-                                  ),
-                                  title: 'Privacy Policy',
-                                  subtitle:
-                                      'Data handling and encryption standards',
-                                ),
-                              ),
-                              Container(
-                                child: Padding(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      24.0, 32.0, 24.0, 32.0),
-                                  child: Container(
-                                    child: Container(
-                                      alignment: AlignmentDirectional(0.0, 0.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.start,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          InkWell(
-                                            splashColor: Colors.transparent,
-                                            focusColor: Colors.transparent,
-                                            hoverColor: Colors.transparent,
-                                            highlightColor: Colors.transparent,
-                                            onTap: () async {
-                                              await AuthRepository().logout();
-                                              FFAppState().clearSession();
-                                              if (!mounted) return;
-                                              context.goNamed(
-                                                  SplashAuthWidget.routeName);
-                                            },
-                                            child: wrapWithModel(
-                                              model: _model.buttonModel2,
-                                              updateCallback: () =>
-                                                  safeSetState(() {}),
-                                              child: ButtonWidget(
-                                                icon: Icon(
-                                                  LucideIcons.logOut,
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primaryText,
-                                                  size: 24.0,
-                                                ),
-                                                iconPresent: true,
-                                                iconEndPresent: false,
-                                                content: 'Sign Out',
-                                                variant: 'destructive',
-                                                size: 'medium',
-                                                fullWidth: true,
-                                                loading: false,
-                                                disabled: false,
-                                              ),
-                                            ),
-                                          ),
-                                          Text(
-                                            'SehatSatli v2.4.0-stable',
-                                            style: FlutterFlowTheme.of(context)
-                                                .labelSmall
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .labelSmall
-                                                            .fontWeight,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .labelSmall
-                                                            .fontStyle,
-                                                  ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .secondaryText,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .labelSmall
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .labelSmall
-                                                          .fontStyle,
-                                                  lineHeight: 1.27,
-                                                ),
-                                          ),
-                                        ].divide(SizedBox(height: 16.0)),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ].divide(SizedBox(height: 4.0)),
+                        Icon(icon,
+                            size: 16.0,
+                            color: mode == current
+                                ? theme.primary
+                                : theme.secondaryText),
+                        SizedBox(width: 6.0),
+                        Text(
+                          label,
+                          style: theme.labelLarge.override(
+                            color: mode == current
+                                ? theme.primaryText
+                                : theme.secondaryText,
+                            letterSpacing: 0.0,
                           ),
                         ),
                       ],
@@ -712,10 +315,8 @@ class _UserProfileSettingsWidgetState extends State<UserProfileSettingsWidget> {
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: MainBottomNavWidget(currentTab: MainTab.profil),
+            ),
+        ],
       ),
     );
   }

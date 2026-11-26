@@ -3,6 +3,7 @@ import '/components/button/button_widget.dart';
 import '/components/text_field/text_field_widget.dart';
 import '/core/network/api_client.dart';
 import '/core/network/push_service.dart';
+import '/core/permissions/app_permissions.dart';
 import '/data/repositories/auth_repository.dart';
 import '/data/repositories/master_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -48,6 +49,12 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
   }
 
   Future<void> _checkPersistedSession() async {
+    // First launch: explain and request device permissions before login.
+    if (!await PermissionConsent.isCompleted()) {
+      if (!mounted) return;
+      context.goNamed(PermissionConsentWidget.routeName);
+      return;
+    }
     final token = await AuthRepository().readPersistedToken();
     if (token == null || token.isEmpty) {
       if (!mounted) return;
@@ -377,7 +384,7 @@ class _SplashAuthWidgetState extends State<SplashAuthWidget> {
                                           ),
                                           leadingIconPresent: true,
                                           trailingIconPresent: false,
-                                          hint: 'officer@menlhk.go.id',
+                                          hint: 'officer@kehutanan.go.id',
                                           value: _model.email,
                                           variant: 'outlined',
                                           error: false,

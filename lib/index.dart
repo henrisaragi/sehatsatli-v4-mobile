@@ -4,6 +4,8 @@ export '/pages/forgot_password/forgot_password_widget.dart'
     show ForgotPasswordWidget;
 export '/pages/quick_report/quick_report_widget.dart' show QuickReportWidget;
 export '/pages/otp_login/otp_login_widget.dart' show OtpLoginWidget;
+export '/pages/permission_consent/permission_consent_widget.dart'
+    show PermissionConsentWidget;
 export '/pages/privacy_policy/privacy_policy_widget.dart'
     show PrivacyPolicyWidget;
 export '/pages/register_upt/register_upt_widget.dart' show RegisterUptWidget;

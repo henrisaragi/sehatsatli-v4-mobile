@@ -35,16 +35,28 @@ class _SyncManagerWidgetState extends State<SyncManagerWidget> {
   bool _isSyncing = false;
   String? _retryingId;
   List<GetAllLocalReportsRow> _reports = [];
+  bool _wasSyncing = false;
+
+  /// Reloads once any sync run finishes — including the background one
+  /// started when connectivity comes back while this page is open.
+  void _onAppStateChanged() {
+    final syncing = FFAppState().isSyncing;
+    if (_wasSyncing && !syncing) _load();
+    _wasSyncing = syncing;
+  }
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => SyncManagerModel());
+    _wasSyncing = FFAppState().isSyncing;
+    FFAppState().addListener(_onAppStateChanged);
     _load();
   }
 
   @override
   void dispose() {
+    FFAppState().removeListener(_onAppStateChanged);
     _model.dispose();
 
     super.dispose();
