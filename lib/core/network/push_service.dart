@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '/data/repositories/notification_repository.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -11,6 +12,10 @@ import '/index.dart';
 /// FCM push notifications (Android + iOS) and the unread badge count.
 ///
 /// The server sends a `notification` payload with `data: {jenis, laporan_id}`.
+/// Pushes pop up as heads-up banners: in the background Android posts them on
+/// the high-importance [_channel] (the manifest's default FCM channel); in the
+/// foreground Android posts nothing itself, so we show them on that channel
+/// via flutter_local_notifications, while iOS shows its own banner.
 /// Tapping a push opens that laporan; a tap that cold-starts the app is kept in
 /// [takePendingLaporanId] until the dashboard is up (after login/splash).
 class PushService {
@@ -23,6 +28,16 @@ class PushService {
   /// Drives the badge on the dashboard bell.
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
+  /// Must match `default_notification_channel_id` in AndroidManifest.xml.
+  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+    'laporan',
+    'Notifikasi laporan',
+    description: 'Pembaruan laporan dan tahap pemeriksaan',
+    importance: Importance.high,
+  );
+
+  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
+
   String? _pendingLaporanId;
   StreamSubscription<String>? _tokenRefreshSub;
 
@@ -34,13 +49,31 @@ class PushService {
   Future<void> init() async {
     if (!_supported) return;
     final messaging = FirebaseMessaging.instance;
-    // iOS shows the system banner in the foreground too; Android doesn't, so
-    // [_onForegroundMessage] shows a snackbar there instead.
     await messaging.setForegroundNotificationPresentationOptions(
         alert: true, badge: true, sound: true);
+    if (_isAndroid) await _initLocalNotifications();
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen((message) => openLaporan(message.data['laporan_id']));
-    _pendingLaporanId = (await messaging.getInitialMessage())?.data['laporan_id'];
+    _pendingLaporanId ??= (await messaging.getInitialMessage())?.data['laporan_id'];
+  }
+
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> _initLocalNotifications() async {
+    await _local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('ic_stat_notification'),
+      ),
+      onDidReceiveNotificationResponse: (response) => openLaporan(response.payload),
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_channel);
+    // A foreground banner tapped after the app was killed cold-starts it.
+    final launch = await _local.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) {
+      _pendingLaporanId = launch?.notificationResponse?.payload;
+    }
   }
 
   /// Asks for notification permission and registers this device's FCM token
@@ -125,16 +158,25 @@ class PushService {
 
   void _onForegroundMessage(RemoteMessage message) {
     unreadCount.value += 1;
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-    final context = appNavigatorKey.currentContext;
     final notification = message.notification;
-    if (context == null || notification == null) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(notification.title ?? notification.body ?? 'Notifikasi baru'),
-      action: SnackBarAction(
-        label: 'Lihat',
-        onPressed: () => openLaporan(message.data['laporan_id']),
+    if (!_isAndroid || notification == null) return;
+    _local.show(
+      id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title: notification.title,
+      body: notification.body,
+      payload: message.data['laporan_id'],
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: 'ic_stat_notification',
+          color: const Color(0xFF17B273),
+          styleInformation: BigTextStyleInformation(notification.body ?? ''),
+        ),
       ),
-    ));
+    );
   }
 }

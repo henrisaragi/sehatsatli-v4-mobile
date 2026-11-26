@@ -60,6 +60,19 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Background FCM pushes: post on the high-importance channel created by
+             PushService so they pop up as heads-up banners, with a monochrome
+             status-bar icon tinted in the brand green. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="laporan" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+
 
 
     </application>
